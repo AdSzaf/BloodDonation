@@ -55,6 +55,7 @@ public class HospitalFederate {
 	protected InteractionClassHandle bloodTransportedHandle;
 	protected ParameterHandle btBloodIdHandle;
 	protected ParameterHandle btHospitalIdHandle;
+	protected ParameterHandle btRequestIdHandle;
 	protected ParameterHandle btBloodAmountHandle;
 	protected ParameterHandle btBloodTypeHandle;
 	protected ParameterHandle btDonationTimeHandle;
@@ -224,6 +225,7 @@ public class HospitalFederate {
 		bloodTransportedHandle     = rtiamb.getInteractionClassHandle("HLAinteractionRoot.BloodTransported");
 		btBloodIdHandle            = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodId");
 		btHospitalIdHandle         = rtiamb.getParameterHandle(bloodTransportedHandle, "hospitalId");
+		btRequestIdHandle          = rtiamb.getParameterHandle(bloodTransportedHandle, "requestId");
 		btBloodAmountHandle        = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodAmount");
 		btBloodTypeHandle          = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodType");
 		btDonationTimeHandle       = rtiamb.getParameterHandle(bloodTransportedHandle, "donationTime");

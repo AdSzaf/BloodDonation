@@ -65,6 +65,7 @@ public class TransportFederate {
 	protected InteractionClassHandle bloodTransportedHandle;
 	protected ParameterHandle btBloodIdHandle;
 	protected ParameterHandle btHospitalIdHandle;
+	protected ParameterHandle btRequestIdHandle;
 	protected ParameterHandle btBloodAmountHandle;
 	protected ParameterHandle btBloodTypeHandle;
 	protected ParameterHandle btDonationTimeHandle;
@@ -190,7 +191,7 @@ public class TransportFederate {
 			double deliveryTime = fedamb.federateTime + transportDelay;
 
 			pendingDeliveries.add(new PendingDelivery(
-					unit.bloodId, hospitalId,
+					unit.bloodId, hospitalId, requestId,
 					unit.bloodAmount, unit.bloodType,
 					unit.donationTime, deliveryTime, isUrgent
 			));
@@ -217,12 +218,14 @@ public class TransportFederate {
 	}
 
 	private void sendBloodTransported(PendingDelivery d) throws RTIexception {
-		ParameterHandleValueMap params = rtiamb.getParameterHandleValueMapFactory().create(5);
+		ParameterHandleValueMap params = rtiamb.getParameterHandleValueMapFactory().create(6);
 
 		params.put(btBloodIdHandle,
 				encoderFactory.createHLAinteger32BE(d.bloodId).toByteArray());
 		params.put(btHospitalIdHandle,
 				encoderFactory.createHLAinteger32BE(d.hospitalId).toByteArray());
+		params.put(btRequestIdHandle,
+				encoderFactory.createHLAinteger32BE(d.requestId).toByteArray());
 		params.put(btBloodAmountHandle,
 				encoderFactory.createHLAfloat32BE(d.bloodAmount).toByteArray());
 		params.put(btBloodTypeHandle,
@@ -270,6 +273,7 @@ public class TransportFederate {
 		bloodTransportedHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.BloodTransported");
 		btBloodIdHandle        = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodId");
 		btHospitalIdHandle     = rtiamb.getParameterHandle(bloodTransportedHandle, "hospitalId");
+		btRequestIdHandle 	   = rtiamb.getParameterHandle(bloodTransportedHandle, "requestId");
 		btBloodAmountHandle    = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodAmount");
 		btBloodTypeHandle      = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodType");
 		btDonationTimeHandle   = rtiamb.getParameterHandle(bloodTransportedHandle, "donationTime");
@@ -294,17 +298,19 @@ public class TransportFederate {
 	static class PendingDelivery {
 		final int    bloodId;
 		final int    hospitalId;
+		final int requestId;
 		final float  bloodAmount;
 		final String bloodType;
 		final double donationTime;
 		final double deliveryTime;
 		final boolean isUrgent;
 
-		PendingDelivery(int bloodId, int hospitalId, float bloodAmount,
+		PendingDelivery(int bloodId, int hospitalId, int requestId, float bloodAmount,
 						String bloodType, double donationTime,
 						double deliveryTime, boolean isUrgent) {
 			this.bloodId      = bloodId;
 			this.hospitalId   = hospitalId;
+			this.requestId = requestId;
 			this.bloodAmount  = bloodAmount;
 			this.bloodType    = bloodType;
 			this.donationTime = donationTime;

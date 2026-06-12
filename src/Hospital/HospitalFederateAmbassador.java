@@ -153,13 +153,18 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 				decDonTime.decode(theParameters.get(federate.btDonationTimeHandle));
 				double donationTime = decDonTime.getValue();
 
+				HLAinteger32BE decReqId = new HLA1516eInteger32BE();
+				decReqId.decode(theParameters.get(federate.btRequestIdHandle));
+				int requestId = decReqId.getValue();
+
 				double currentTime = this.federateTime;
 				double bloodAgeDays = currentTime - donationTime;
 
 				log("Odebrano BloodTransported: id=" + bloodId
 						+ ", typ=" + bloodType
 						+ ", ilosc=" + bloodAmount
-						+ ", wiek_krwi=" + String.format("%.1f", bloodAgeDays) + " dni");
+						+ ", wiek_krwi=" + String.format("%.1f", bloodAgeDays) + " dni"
+						+ "id request=" + requestId);
 
 				// Separacja krwi na skladniki + aktualizacja statystyk
 				if (federate.hospital != null) {
@@ -167,7 +172,7 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 
 					// Oznacz najstarsze otwarte zamowienie jako zrealizowane
 					// -> usunie je z pendingRequests zanim checkTimeouts policzy jako niedobor
-					federate.hospital.registerDelivery();
+					federate.hospital.registerDelivery(requestId);
 
 					log("Szpital #" + targetHospitalId
 							+ " | Sredni wiek krwi: "
