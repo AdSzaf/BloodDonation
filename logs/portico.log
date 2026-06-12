@@ -1,1 +1,2 @@
-14:00:09,239 ERROR [main] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+14:58:22,734 ERROR [Thread-Hospital] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+14:58:23,729 ERROR [Thread-BloodPoints] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
