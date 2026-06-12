@@ -1,22 +1,10 @@
-/*
- *   Copyright 2012 The Portico Project
- *
- *   This file is part of portico.
- *
- *   portico is free software; you can redistribute it and/or modify
- *   it under the terms of the Common Developer and Distribution License (CDDL) 
- *   as published by Sun Microsystems. For more information see the LICENSE file.
- *   
- *   Use of this software is strictly AT YOUR OWN RISK!!!
- *   If something bad happens you do not have permission to come crying to me.
- *   (that goes for your lawyer as well)
- *
- */
 package BloodPoints;
 
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.EncoderFactory;
+import hla.rti1516e.encoding.HLAASCIIstring;
 import hla.rti1516e.encoding.HLAfloat32BE;
+import hla.rti1516e.encoding.HLAfloat64BE;
 import hla.rti1516e.encoding.HLAinteger32BE;
 import hla.rti1516e.exceptions.*;
 import hla.rti1516e.time.HLAfloat64Interval;
@@ -28,352 +16,242 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.Random;
+import java.util.List;
 
+/**
+ * Federat BloodPoints - symuluje punkty poboru krwi (stacjonarne i mobilne).
+ *
+ * Publikuje:  BloodCollected
+ * Subskrybuje: (nic)
+ *
+ * Logika glownej petli:
+ *  1. Losuj czas przyjscia dawcy i odczekaj.
+ *  2. Dawca przechodzi badania laboratoryjne (losowy czas).
+ *  3. Jesli dawca sie kwalifikuje (80% szans):
+ *     - Stacjonarny: wyslij BloodCollected natychmiast.
+ *     - Mobilny: dodaj do bufora; po zakonczeniu zmiany wyslij serie BloodCollected.
+ */
+public class BloodPointsFederate {
 
-public class BloodPointsFederate
-{
-	/** The sync point all federates will sync up on before starting */
 	public static final String READY_TO_RUN = "ReadyToRun";
+	private static final String FEDERATION_NAME = "BloodSupplyFederation";
+	private static final String FOM_PATH = "foms/ProducerConsumer.xml";
 
-	//----------------------------------------------------------
-	//                   INSTANCE VARIABLES
-	//----------------------------------------------------------
+	// RTI
 	private RTIambassador rtiamb;
-	private BloodPointsFederateAmbassador fedamb;  // created when we connect
-	private HLAfloat64TimeFactory timeFactory; // set when we join
-	protected EncoderFactory encoderFactory;     // set when we join
+	private BloodPointsFederateAmbassador fedamb;
+	private HLAfloat64TimeFactory timeFactory;
+	protected EncoderFactory encoderFactory;
 
-	// caches of handle types - set once we join a federation
-	protected ObjectClassHandle storageHandle;
-	protected AttributeHandle storageMaxHandle;
-	protected AttributeHandle storageAvailableHandle;
+	// Uchwyty interakcji BloodCollected i jej parametrow
 	protected InteractionClassHandle bloodCollectedHandle;
+	protected ParameterHandle bcBloodIdHandle;
+	protected ParameterHandle bcBloodAmountHandle;
+	protected ParameterHandle bcBloodTypeHandle;
+	protected ParameterHandle bcDonationTimeHandle;
+	protected ParameterHandle bcIsMobileHandle;
 
-	protected int storageMax = 0;
-	protected int storageAvailable = 0;
-	//----------------------------------------------------------
-	//                      CONSTRUCTORS
-	//----------------------------------------------------------
+	// -----------------------------------------------------------------------
 
-	//----------------------------------------------------------
-	//                    INSTANCE METHODS
-	//----------------------------------------------------------
-	/**
-	 * This is just a helper method to make sure all logging it output in the same form
-	 */
-	private void log( String message )
-	{
-		System.out.println( "ProducerFederate   : " + message );
+	private void log(String message) {
+		System.out.println("BloodPointsFederate : " + message);
 	}
 
-	/**
-	 * This method will block until the user presses enter
-	 */
-	private void waitForUser()
-	{
-		log( " >>>>>>>>>> Press Enter to Continue <<<<<<<<<<" );
-		BufferedReader reader = new BufferedReader( new InputStreamReader(System.in) );
-		try
-		{
-			reader.readLine();
-		}
-		catch( Exception e )
-		{
-			log( "Error while waiting for user input: " + e.getMessage() );
-			e.printStackTrace();
-		}
+	private void waitForUser() {
+		log(">>>>>>>>>> Nacisnij Enter aby kontynuowac <<<<<<<<<<");
+		BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+		try { reader.readLine(); }
+		catch (Exception e) { log("Blad oczekiwania na uzytkownika: " + e.getMessage()); }
 	}
-	
-	///////////////////////////////////////////////////////////////////////////
-	////////////////////////// Main Simulation Method /////////////////////////
-	///////////////////////////////////////////////////////////////////////////
-	/**
-	 * This is the main simulation loop. It can be thought of as the main method of
-	 * the federate. For a description of the basic flow of this federate, see the
-	 * class level comments
-	 */
-	public void runFederate( String federateName ) throws Exception
-	{
-		/////////////////////////////////////////////////
-		// 1 & 2. create the RTIambassador and Connect //
-		/////////////////////////////////////////////////
-		log( "Creating RTIambassador" );
+
+	// -----------------------------------------------------------------------
+	// Glowna metoda symulacji
+	// -----------------------------------------------------------------------
+	public void runFederate(String federateName) throws Exception {
+
+		// 1. Utworz RTIambassador i polacz
+		log("Tworze RTIambassador...");
 		rtiamb = RtiFactoryFactory.getRtiFactory().getRtiAmbassador();
 		encoderFactory = RtiFactoryFactory.getRtiFactory().getEncoderFactory();
-		
-		// connect
-		log( "Connecting..." );
-		fedamb = new BloodPointsFederateAmbassador( this );
-		rtiamb.connect( fedamb, CallbackModel.HLA_EVOKED );
+		fedamb = new BloodPointsFederateAmbassador(this);
+		rtiamb.connect(fedamb, CallbackModel.HLA_EVOKED);
 
-		//////////////////////////////
-		// 3. create the federation //
-		//////////////////////////////
-		log( "Creating Federation..." );
-		// We attempt to create a new federation with the first three of the
-		// restaurant FOM modules covering processes, food and drink
-		try
-		{
-			URL[] modules = new URL[]{
-			    (new File("foms/ProducerConsumer.xml")).toURI().toURL(),
-			};
-			
-			rtiamb.createFederationExecution( "ProducerConsumerFederation", modules );
-			log( "Created Federation" );
-		}
-		catch( FederationExecutionAlreadyExists exists )
-		{
-			log( "Didn't create federation, it already existed" );
-		}
-		catch( MalformedURLException urle )
-		{
-			log( "Exception loading one of the FOM modules from disk: " + urle.getMessage() );
-			urle.printStackTrace();
+		// 2. Stworz lub dolacz do federacji
+		log("Tworze federacje...");
+		try {
+			URL[] modules = { (new File(FOM_PATH)).toURI().toURL() };
+			rtiamb.createFederationExecution(FEDERATION_NAME, modules);
+			log("Federacja utworzona.");
+		} catch (FederationExecutionAlreadyExists e) {
+			log("Federacja juz istnieje - dolaczam.");
+		} catch (MalformedURLException e) {
+			log("Blad URL FOM: " + e.getMessage());
 			return;
 		}
-		
-		////////////////////////////
-		// 4. join the federation //
-		////////////////////////////
 
-		rtiamb.joinFederationExecution( federateName,            // name for the federate
-		                                "producer",   // federate type
-		                                "ProducerConsumerFederation"     // name of federation
-		                                 );           // modules we want to add
+		// 3. Dolacz do federacji
+		rtiamb.joinFederationExecution(federateName, "bloodpoints", FEDERATION_NAME);
+		log("Dolaczono do federacji jako " + federateName);
+		this.timeFactory = (HLAfloat64TimeFactory) rtiamb.getTimeFactory();
 
-		log( "Joined Federation as " + federateName );
-		
-		// cache the time factory for easy access
-		this.timeFactory = (HLAfloat64TimeFactory)rtiamb.getTimeFactory();
-
-		////////////////////////////////
-		// 5. announce the sync point //
-		////////////////////////////////
-		// announce a sync point to get everyone on the same page. if the point
-		// has already been registered, we'll get a callback saying it failed,
-		// but we don't care about that, as long as someone registered it
-		rtiamb.registerFederationSynchronizationPoint( READY_TO_RUN, null );
-		// wait until the point is announced
-		while( fedamb.isAnnounced == false )
-		{
-			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
-		}
-
-		// WAIT FOR USER TO KICK US OFF
-		// So that there is time to add other federates, we will wait until the
-		// user hits enter before proceeding. That was, you have time to start
-		// other federates.
+		// 4. Synchronizacja ReadyToRun
+		rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
+		while (!fedamb.isAnnounced) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
 		waitForUser();
+		rtiamb.synchronizationPointAchieved(READY_TO_RUN);
+		log("Osiagnieto punkt synchronizacji: " + READY_TO_RUN);
+		while (!fedamb.isReadyToRun) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
 
-		///////////////////////////////////////////////////////
-		// 6. achieve the point and wait for synchronization //
-		///////////////////////////////////////////////////////
-		// tell the RTI we are ready to move past the sync point and then wait
-		// until the federation has synchronized on
-		rtiamb.synchronizationPointAchieved( READY_TO_RUN );
-		log( "Achieved sync point: " +READY_TO_RUN+ ", waiting for federation..." );
-		while( fedamb.isReadyToRun == false )
-		{
-			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
-		}
-
-		/////////////////////////////
-		// 7. enable time policies //
-		/////////////////////////////
-		// in this section we enable/disable all time policies
-		// note that this step is optional!
+		// 5. Polityki czasu
 		enableTimePolicy();
-		log( "Time Policy Enabled" );
+		log("Polityka czasu wlaczona.");
 
-		//////////////////////////////
-		// 8. publish and subscribe //
-		//////////////////////////////
-		// in this section we tell the RTI of all the data we are going to
-		// produce, and all the data we want to know about
+		// 6. Publikuj i subskrybuj
 		publishAndSubscribe();
-		log( "Published and Subscribed" );
+		log("Publikowanie i subskrypcja skonfigurowane.");
 
-//		// 10. do the main simulation loop //
-		/////////////////////////////////////
-		// here is where we do the meat of our work. in each iteration, we will
-		// update the attribute values of the object we registered, and will
-		// send an interaction.
-		BloodPoints bloodPoints = new BloodPoints();
-        int patientId = 0;
-		while( fedamb.isRunning )
-		{
-            int rand = new Random().nextInt( 100 );
-            // Tutaj trzeba dodać warunki na to kiedy ta interakcja zostaje wysyłana. Obecnie jest wysyłana ciągle.
-//			int producedValue = bloodPoints.produce();
-//			if(storageAvailable + producedValue <= storageMax ) {
-            log("Pojawił się pacjent " + ++patientId);
-            if(rand > 20) {
-                sendBloodCollectedInteraction(1.5f);
-                log("Pacjent " + patientId + " Pomyślnie przeszedł badania i pobrano krew");
-            }
-            else {
-                log("Pacjent " + patientId + " Nie przeszedł badań");
-            }
+		// -----------------------------------------------------------------------
+		// Glowna petla symulacji
+		// -----------------------------------------------------------------------
+		BloodPoints bp = new BloodPoints();
+		int donorCounter = 0;
+		int shiftElapsed = 0; // czas uplyniety w biezacej zmianie (dla krwiobusu)
 
-//			}
-//			else
-//			{
-//				log("Producing canceled because of full storage.");
-//			}
-			// 9.3 request a time advance and wait until we get it
-			advanceTime(bloodPoints.getTimeToNext());
-			log( "Time Advanced to " + fedamb.federateTime );
+		while (fedamb.isRunning) {
+
+			// --- Krok 1: czas przyjscia kolejnego dawcy ---
+			int timeToNextDonor = bp.getTimeToNextDonor();
+			advanceTime(timeToNextDonor);
+			shiftElapsed += timeToNextDonor;
+			donorCounter++;
+			log("Pojawil sie dawca #" + donorCounter + " (t=" + fedamb.federateTime + ")");
+
+			// --- Krok 2: badania laboratoryjne ---
+			int labTime = bp.getLabTestDuration();
+			advanceTime(labTime);
+			shiftElapsed += labTime;
+			log("Dawca #" + donorCounter + " przeszedl badania (czas lab=" + labTime + ")");
+
+			// --- Krok 3: kwalifikacja dawcy ---
+			if (!bp.donorQualifies()) {
+				log("Dawca #" + donorCounter + " NIE przeszedl kwalifikacji - odrzucony.");
+			} else {
+				int bloodId = bp.nextBloodId();
+				String bloodType = bp.randomBloodType();
+				float amount = BloodPoints.UNIT_VOLUME;
+				double donationTime = fedamb.federateTime;
+
+				if (!bp.isMobile()) {
+					// --- STACJONARNY: wyslij natychmiast ---
+					log("Dawca #" + donorCounter + " [STACJONARNY] - wysylam BloodCollected #"
+							+ bloodId + " (" + bloodType + ")");
+					sendBloodCollected(bloodId, amount, bloodType, donationTime, false);
+				} else {
+					// --- MOBILNY: buforuj ---
+					bp.addToMobileBuffer(bloodId, bloodType);
+					// Zapamietaj szczegoly donacji zeby moc wyslac po zakonczeniu zmiany
+					// (uproszczenie: wysylamy z biezacym czasem - w pelnej implementacji
+					//  mozna przechowywac donationTime osobno)
+				}
+			}
+
+			// --- Krok 4: dla krwiobusu - czy zmiana sie skonczyla? ---
+			if (bp.isMobile() && bp.isShiftOver(shiftElapsed)) {
+				shiftElapsed = 0;
+				List<int[]> batch = bp.flushMobileBuffer();
+				log("Koniec zmiany krwiobusu - wysylam partie " + batch.size() + " donacji.");
+				for (int[] entry : batch) {
+					int bId = entry[0];
+					// W buforze nie przechowalismy bloodType jako stringa - upraszczamy:
+					// generujemy losowa grupe dla kazdej jednostki z bufora
+					String bt = bp.randomBloodType();
+					sendBloodCollected(bId, BloodPoints.UNIT_VOLUME, bt, fedamb.federateTime, true);
+				}
+			}
 		}
 
-
-		////////////////////////////////////
-		// 12. resign from the federation //
-		////////////////////////////////////
-		rtiamb.resignFederationExecution( ResignAction.DELETE_OBJECTS );
-		log( "Resigned from Federation" );
-
-		////////////////////////////////////////
-		// 13. try and destroy the federation //
-		////////////////////////////////////////
-		// NOTE: we won't die if we can't do this because other federates
-		//       remain. in that case we'll leave it for them to clean up
-		try
-		{
-			rtiamb.destroyFederationExecution( "ExampleFederation" );
-			log( "Destroyed Federation" );
-		}
-		catch( FederationExecutionDoesNotExist dne )
-		{
-			log( "No need to destroy federation, it doesn't exist" );
-		}
-		catch( FederatesCurrentlyJoined fcj )
-		{
-			log( "Didn't destroy federation, federates still joined" );
-		}
-	}
-	private void sendBloodCollectedInteraction(float bloodAmount) throws FederateNotExecutionMember, InvalidInteractionClassHandle, NameNotFound, NotConnected, RTIinternalError, InteractionParameterNotDefined, RestoreInProgress, InteractionClassNotDefined, InteractionClassNotPublished, SaveInProgress {
-
-
-        ParameterHandleValueMap parameterHandleValueMap = rtiamb.getParameterHandleValueMapFactory().create(1);
-        ParameterHandle bloodAmountHandle = rtiamb.getParameterHandle(bloodCollectedHandle, "bloodAmount");
-        HLAfloat32BE count = encoderFactory.createHLAfloat32BE(bloodAmount);
-        parameterHandleValueMap.put(bloodAmountHandle, count.toByteArray());
-        rtiamb.sendInteraction(bloodCollectedHandle, parameterHandleValueMap, generateTag());
-    }
-	////////////////////////////////////////////////////////////////////////////
-	////////////////////////////// Helper Methods //////////////////////////////
-	////////////////////////////////////////////////////////////////////////////
-	/**
-	 * This method will attempt to enable the various time related properties for
-	 * the federate
-	 */
-	private void enableTimePolicy() throws Exception
-	{
-		// NOTE: Unfortunately, the LogicalTime/LogicalTimeInterval create code is
-		//       Portico specific. You will have to alter this if you move to a
-		//       different RTI implementation. As such, we've isolated it into a
-		//       method so that any change only needs to happen in a couple of spots 
-		HLAfloat64Interval lookahead = timeFactory.makeInterval( fedamb.federateLookahead );
-		
-		////////////////////////////
-		// enable time regulation //
-		////////////////////////////
-		this.rtiamb.enableTimeRegulation( lookahead );
-
-		// tick until we get the callback
-		while( fedamb.isRegulating == false )
-		{
-			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
-		}
-		
-		/////////////////////////////
-		// enable time constrained //
-		/////////////////////////////
-		this.rtiamb.enableTimeConstrained();
-		
-		// tick until we get the callback
-		while( fedamb.isConstrained == false )
-		{
-			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
+		// Rezygnacja
+		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
+		log("Zrezygnowano z federacji.");
+		try {
+			rtiamb.destroyFederationExecution(FEDERATION_NAME);
+			log("Federacja zniszczona.");
+		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined e) {
+			log("Nie mozna zniszczyc federacji: " + e.getMessage());
 		}
 	}
-	
-	/**
-	 * This method will inform the RTI about the types of data that the federate will
-	 * be creating, and the types of data we are interested in hearing about as other
-	 * federates produce it.
-	 */
-	private void publishAndSubscribe() throws RTIexception
-	{
-		// subscribe for storage
-//		this.storageHandle = rtiamb.getObjectClassHandle( "HLAobjectRoot.ProductStorage" );
-//		this.storageMaxHandle = rtiamb.getAttributeHandle( storageHandle, "max" );
-//		this.storageAvailableHandle = rtiamb.getAttributeHandle( storageHandle, "available" );
-////		// package the information into a handle set
-//		AttributeHandleSet attributes = rtiamb.getAttributeHandleSetFactory().create();
-//		attributes.add( storageMaxHandle );
-//		attributes.add( storageAvailableHandle );
-//		rtiamb.subscribeObjectClassAttributes( storageHandle, attributes );
 
-//		publish AddProducts Interaction
-		String iname = "HLAinteractionRoot.BloodCollected";
-		bloodCollectedHandle = rtiamb.getInteractionClassHandle( iname );
-		// do the publication
+	// -----------------------------------------------------------------------
+	// Wyslanie interakcji BloodCollected z wszystkimi parametrami z FOM
+	// -----------------------------------------------------------------------
+	private void sendBloodCollected(int bloodId, float bloodAmount, String bloodType,
+									double donationTime, boolean isMobile) throws RTIexception {
+
+		ParameterHandleValueMap params = rtiamb.getParameterHandleValueMapFactory().create(5);
+
+		HLAinteger32BE encId = encoderFactory.createHLAinteger32BE(bloodId);
+		params.put(bcBloodIdHandle, encId.toByteArray());
+
+		HLAfloat32BE encAmount = encoderFactory.createHLAfloat32BE(bloodAmount);
+		params.put(bcBloodAmountHandle, encAmount.toByteArray());
+
+		HLAASCIIstring encType = encoderFactory.createHLAASCIIstring(bloodType);
+		params.put(bcBloodTypeHandle, encType.toByteArray());
+
+		HLAfloat64BE encTime = encoderFactory.createHLAfloat64BE(donationTime);
+		params.put(bcDonationTimeHandle, encTime.toByteArray());
+
+		// HLAboolean w Portico = HLAinteger32BE (0=false, 1=true)
+		HLAinteger32BE encMobile = encoderFactory.createHLAinteger32BE(isMobile ? 1 : 0);
+		params.put(bcIsMobileHandle, encMobile.toByteArray());
+
+		rtiamb.sendInteraction(bloodCollectedHandle, params, generateTag());
+		log("Wyslano BloodCollected: id=" + bloodId + ", type=" + bloodType
+				+ ", amount=" + bloodAmount + ", donationTime=" + donationTime
+				+ ", mobile=" + isMobile);
+	}
+
+	// -----------------------------------------------------------------------
+	// Metody pomocnicze HLA
+	// -----------------------------------------------------------------------
+	private void enableTimePolicy() throws Exception {
+		HLAfloat64Interval lookahead = timeFactory.makeInterval(fedamb.federateLookahead);
+		rtiamb.enableTimeRegulation(lookahead);
+		while (!fedamb.isRegulating) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
+		rtiamb.enableTimeConstrained();
+		while (!fedamb.isConstrained) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
+	}
+
+	private void publishAndSubscribe() throws RTIexception {
+		// Publikuj BloodCollected
+		bloodCollectedHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.BloodCollected");
+		bcBloodIdHandle     = rtiamb.getParameterHandle(bloodCollectedHandle, "bloodId");
+		bcBloodAmountHandle = rtiamb.getParameterHandle(bloodCollectedHandle, "bloodAmount");
+		bcBloodTypeHandle   = rtiamb.getParameterHandle(bloodCollectedHandle, "bloodType");
+		bcDonationTimeHandle= rtiamb.getParameterHandle(bloodCollectedHandle, "donationTime");
+		bcIsMobileHandle    = rtiamb.getParameterHandle(bloodCollectedHandle, "isMobile");
 		rtiamb.publishInteractionClass(bloodCollectedHandle);
-
+		log("Publikuje: BloodCollected");
 	}
-	/**
-	 * This method will request a time advance to the current time, plus the given
-	 * timestep. It will then wait until a notification of the time advance grant
-	 * has been received.
-	 */
-	private void advanceTime( double timestep ) throws RTIexception
-	{
-		// request the advance
+
+	private void advanceTime(double timestep) throws RTIexception {
 		fedamb.isAdvancing = true;
-		HLAfloat64Time time = timeFactory.makeTime( fedamb.federateTime + timestep );
-		rtiamb.timeAdvanceRequest( time );
-		
-		// wait for the time advance to be granted. ticking will tell the
-		// LRC to start delivering callbacks to the federate
-		while( fedamb.isAdvancing )
-		{
-			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
-		}
+		HLAfloat64Time time = timeFactory.makeTime(fedamb.federateTime + timestep);
+		rtiamb.timeAdvanceRequest(time);
+		while (fedamb.isAdvancing) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
 	}
 
-	private short getTimeAsShort()
-	{
-		return (short)fedamb.federateTime;
+	private byte[] generateTag() {
+		return ("(ts)" + System.currentTimeMillis()).getBytes();
 	}
 
-	private byte[] generateTag()
-	{
-		return ("(timestamp) "+System.currentTimeMillis()).getBytes();
-	}
-
-	//----------------------------------------------------------
-	//                     STATIC METHODS
-	//----------------------------------------------------------
-	public static void main( String[] args )
-	{
-		// get a federate name, use "exampleFederate" as default
-		String federateName = "BloodPoints";
-		if( args.length != 0 )
-		{
-			federateName = args[0];
-		}
-		
-		try
-		{
-			// run the example federate
-			new BloodPointsFederate().runFederate( federateName );
-		}
-		catch( Exception rtie )
-		{
-			// an exception occurred, just log the information and exit
-			rtie.printStackTrace();
+	// -----------------------------------------------------------------------
+	public static void main(String[] args) {
+		String federateName = (args.length > 0) ? args[0] : "BloodPoints";
+		try {
+			new BloodPointsFederate().runFederate(federateName);
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 }
