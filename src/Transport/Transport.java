@@ -3,21 +3,20 @@ package Transport;
 import java.util.*;
 
 /**
- * Singleton reprezentujacy Centrum Logistyczno-Magazynowe RCKiK.
+ * Singleton - Centrum Logistyczno-Magazynowe RCKiK.
  *
- * Przechowuje krew w mapie: grupa_krwi -> kolejka FIFO (najstarsza z przodu).
- * Realizuje:
- *  - addBlood()        : przyjecie jednostki od punktu poboru
- *  - removeExpired()   : utylizacja przeterminowanych jednostek
- *  - fulfillRequest()  : wydanie najstarszej krwi danego typu (FIFO)
+ * Zmiany v3:
+ *  - fulfillRequest() wydaje tyle jednostek ile wynika z requestedAmount (nie tylko 1)
+ *  - fulfillRequest() przyjmuje flage isUrgent - nagle zamowienia obslugiwane priorytetowo:
+ *    jesli brakuje dokladnego typu, szpital moze dostac krew 0_MINUS (uniwersalny dawca)
  */
 public class Transport {
 
-    // Termin waznosci krwi pelnej w jednostkach symulacyjnych
-    // Przyjmujemy 1 j.s. = 1 dzien, krew wazna 42 dni
     public static final double EXPIRY_DAYS = 42.0;
 
-    // Reprezentacja pojedynczej jednostki krwi w magazynie
+    // Uniwersalna grupa krwi - stosowana jako fallback dla naglych zamowien
+    public static final String UNIVERSAL_TYPE = "0_MINUS";
+
     public static class BloodEntry {
         public final int    bloodId;
         public final float  bloodAmount;
@@ -49,32 +48,22 @@ public class Transport {
     // Singleton
     // -----------------------------------------------------------------------
     private static Transport instance = null;
-
     private Transport() {}
-
     public static Transport getInstance() {
         if (instance == null) instance = new Transport();
         return instance;
     }
 
-    // -----------------------------------------------------------------------
-    // Stan magazynu
-    // -----------------------------------------------------------------------
-
     // Mapa: grupa krwi -> kolejka FIFO (przod = najstarsza jednostka)
     private final Map<String, Deque<BloodEntry>> bloodStorage = new HashMap<>();
 
-    // Laczna liczba zarejestrowanych niedoborow
+    // Laczna liczba zarejestrowanych niedoborow (po stronie magazynu)
     private int shortageCount = 0;
 
     // -----------------------------------------------------------------------
     // Operacje na magazynie
     // -----------------------------------------------------------------------
 
-    /**
-     * Przyjmuje jednostke krwi do magazynu.
-     * Wywolywane po odebraniu interakcji BloodCollected.
-     */
     public void addBlood(int bloodId, float bloodAmount,
                          String bloodType, double donationTime) {
         BloodEntry entry = new BloodEntry(bloodId, bloodAmount, bloodType, donationTime);
@@ -86,16 +75,10 @@ public class Transport {
                 + bloodStorage.get(bloodType).size() + " szt.");
     }
 
-    /**
-     * Usuwa przeterminowane jednostki ze wszystkich kolejek.
-     * Wywolywane co krok symulacyjny.
-     * @return liczba usuniętych jednostek
-     */
     public int removeExpired(double currentTime) {
         int removed = 0;
         for (Map.Entry<String, Deque<BloodEntry>> entry : bloodStorage.entrySet()) {
             Deque<BloodEntry> queue = entry.getValue();
-            // FIFO: najstarsza z przodu - usuwamy z przodu az znajdziemy swiezą
             while (!queue.isEmpty() && queue.peekFirst().isExpired(currentTime)) {
                 BloodEntry expired = queue.pollFirst();
                 System.out.println("Transport [UTYLIZACJA]: Usunieto przeterminowana "
@@ -107,36 +90,76 @@ public class Transport {
     }
 
     /**
-     * Probuje zrealizowac zapotrzebowanie szpitala na krew danego typu.
-     * Stosuje zasade FIFO - wydaje najstarsza pasujaca jednostke.
+     * Realizuje zapotrzebowanie - zwraca liste wydanych jednostek (moze byc wiele).
      *
-     * @return BloodEntry jesli krew dostepna, null jesli niedobor
+     * Logika:
+     *  1. Oblicz ile jednostek (0.45l) potrzeba z requestedAmount.
+     *  2. Pobierz tyle jednostek FIFO z kolejki danego typu.
+     *  3. Jesli zamowienie NAGLE i brakuje jednostek zadanego typu:
+     *     - uzyj krwi 0_MINUS jako uniwersalnego zastepstwa.
+     *  4. Jesli nadal brak - rejestruj niedobor i zwroc co udalo sie zebrać
+     *     (moze byc czesciowa realizacja).
+     *
+     * @return lista wydanych jednostek (pusta jesli kompletny niedobor)
      */
-    public BloodEntry fulfillRequest(String bloodType, float requestedAmount) {
-        Deque<BloodEntry> queue = bloodStorage.get(bloodType);
-        if (queue == null || queue.isEmpty()) {
-            shortageCount++;
-            System.out.println("Transport [NIEDOR]: Brak krwi typu " + bloodType
-                    + " | Laczne niedobory: " + shortageCount);
-            return null;
-        }
-        // FIFO: pobierz najstarsza (z przodu)
-        BloodEntry unit = queue.pollFirst();
-        if (queue.isEmpty()) bloodStorage.remove(bloodType);
+    public List<BloodEntry> fulfillRequest(String bloodType, float requestedAmount,
+                                           boolean isUrgent) {
+        int unitsNeeded = Math.max(1, Math.round(requestedAmount / 0.45f));
+        List<BloodEntry> result = new ArrayList<>();
 
-        System.out.println("Transport [WYDANO]: " + unit
-                + " | Pozostalo " + bloodType + ": "
-                + bloodStorage.getOrDefault(bloodType, new ArrayDeque<>()).size() + " szt.");
-        return unit;
+        // Pobierz ile mozna z zadanego typu
+        result.addAll(pollUnits(bloodType, unitsNeeded));
+
+        // Jesli nagle zamowienie i nie zebralismy wszystkiego - uzupelnij 0_MINUS
+        int stillNeeded = unitsNeeded - result.size();
+        if (stillNeeded > 0 && isUrgent && !bloodType.equals(UNIVERSAL_TYPE)) {
+            List<BloodEntry> fallback = pollUnits(UNIVERSAL_TYPE, stillNeeded);
+            if (!fallback.isEmpty()) {
+                System.out.println("Transport [PILNE-FALLBACK]: Brakuje " + stillNeeded
+                        + " szt. " + bloodType + " -> uzupelniam " + fallback.size()
+                        + " szt. " + UNIVERSAL_TYPE);
+                result.addAll(fallback);
+            }
+        }
+
+        // Policz niedobory (brakujace jednostki)
+        int shortage = unitsNeeded - result.size();
+        if (shortage > 0) {
+            shortageCount += shortage;
+            System.out.println("Transport [NIEDOR]: Brakuje " + shortage
+                    + " szt. typu " + bloodType
+                    + (isUrgent ? " (NAGLE)" : " (planowe)")
+                    + " | Laczne niedobory: " + shortageCount);
+        }
+
+        if (!result.isEmpty()) {
+            System.out.println("Transport [WYDANO]: " + result.size()
+                    + " szt. dla zamowienia " + bloodType
+                    + " | Magazyn: " + getTotalUnits() + " szt.");
+        }
+
+        return result;
+    }
+
+    /**
+     * Pomocnicza - pobiera do maxUnits jednostek z kolejki danego typu (FIFO).
+     */
+    private List<BloodEntry> pollUnits(String bloodType, int maxUnits) {
+        List<BloodEntry> taken = new ArrayList<>();
+        Deque<BloodEntry> queue = bloodStorage.get(bloodType);
+        if (queue == null) return taken;
+        while (!queue.isEmpty() && taken.size() < maxUnits) {
+            taken.add(queue.pollFirst());
+        }
+        if (queue.isEmpty()) bloodStorage.remove(bloodType);
+        return taken;
     }
 
     // -----------------------------------------------------------------------
     // Statystyki
     // -----------------------------------------------------------------------
 
-    public int getShortageCount() {
-        return shortageCount;
-    }
+    public int getShortageCount() { return shortageCount; }
 
     public int getTotalUnits() {
         return bloodStorage.values().stream().mapToInt(Deque::size).sum();
@@ -147,7 +170,6 @@ public class Transport {
         return (q == null) ? 0 : q.size();
     }
 
-    /** Zwraca czytelny stan magazynu dla kazdej grupy krwi. */
     public String getStorageSummary() {
         if (bloodStorage.isEmpty()) return "PUSTY";
         StringBuilder sb = new StringBuilder();

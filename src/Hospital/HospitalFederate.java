@@ -19,23 +19,17 @@ import java.net.URL;
  * Publikuje:   Request
  * Subskrybuje: BloodTransported
  *
- * Glowna petla:
- *  1. Losuj czas do kolejnego zapotrzebowania i zaczekaj (advanceTime).
- *  2. Wyslij interakcje Request (losuj: nagle / planowe, grupe krwi, ilosc).
- *  3. Przy odbiorze BloodTransported (w ambassadorze):
- *       - Wykonaj separacje na skladniki (losowy czas przetwarzania).
- *       - Oblicz wiek_krwi = czas_obecny - donationTime.
- *       - Zaktualizuj srednia liczbe dni od pobrania do wydania.
- *  4. Na koniec symulacji wydrukuj statystyki.
+ * Zmiany v3:
+ *  - uzywa Hospital.registerRequest() zamiast nextRequestId()
+ *  - wywoluje Hospital.checkTimeouts() co krok - liczy wlasny wskaznik niedoboru
+ *  - petla co 1 j.s. (advanceTime(1)) + co MIN_REQUEST_INTERVAL generuje zamowienie
  */
 public class HospitalFederate {
 
-	public static final String READY_TO_RUN  = "ReadyToRun";
+	public static final String READY_TO_RUN   = "ReadyToRun";
 	private static final String FEDERATION_NAME = "BloodSupplyFederation";
-	private static final String FOM_PATH = "foms/ProducerConsumer.xml";
-
-	// ID szpitala - mozna ustawic przez argument lub stala
-	private static final int HOSPITAL_ID = 1;
+	private static final String FOM_PATH        = "foms/ProducerConsumer.xml";
+	private static final int    HOSPITAL_ID     = 1;
 
 	// RTI
 	private RTIambassador rtiamb;
@@ -59,8 +53,10 @@ public class HospitalFederate {
 	protected ParameterHandle btBloodTypeHandle;
 	protected ParameterHandle btDonationTimeHandle;
 
-	// Logika szpitala
 	Hospital hospital;
+
+	// Czas do nastepnego zamowienia - odliczany w petli krokowej
+	private double timeToNextRequest = 0;
 
 	// -----------------------------------------------------------------------
 
@@ -101,7 +97,6 @@ public class HospitalFederate {
 		log("Dolaczono jako " + federateName);
 		this.timeFactory = (HLAfloat64TimeFactory) rtiamb.getTimeFactory();
 
-		// Synchronizacja ReadyToRun
 		rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 		while (!fedamb.isAnnounced) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
 		waitForUser();
@@ -114,48 +109,52 @@ public class HospitalFederate {
 		publishAndSubscribe();
 		log("Publikowanie i subskrypcja skonfigurowane.");
 
-		// Inicjalizacja logiki szpitala
 		hospital = new Hospital(HOSPITAL_ID);
+		// Pierwsze zamowienie po losowym czasie
+		timeToNextRequest = hospital.getTimeToNextRequest();
 
 		// -----------------------------------------------------------------------
-		// Glowna petla symulacji
+		// Glowna petla - krok co 1 j.s. (jak Transport)
+		// Dzieki temu checkTimeouts() dziala dokladnie, a zamowienia
+		// sa generowane gdy odlicznik dobiegnie do 0
 		// -----------------------------------------------------------------------
 		while (fedamb.isRunning) {
+			advanceTime(1.0);
+			double currentTime = fedamb.federateTime;
 
-			// Krok 1: odczekaj losowy czas do kolejnego zapotrzebowania
-			int timeToRequest = hospital.getTimeToNextRequest();
-			advanceTime(timeToRequest);
-			log("t=" + fedamb.federateTime + " | Generuje zapotrzebowanie...");
+			// Sprawdz timeouty otwartych zamowien -> liczy wlasny wskaznik niedoboru
+			hospital.checkTimeouts(currentTime);
 
-			// Krok 2: wyslij Request
-			int     requestId       = hospital.nextRequestId();
-			boolean isUrgent        = hospital.isUrgentRequest();
-			String  bloodType       = hospital.randomBloodType();
-			float   requestedAmount = hospital.randomRequestedAmount();
+			// Odlicz czas do kolejnego zamowienia
+			timeToNextRequest -= 1.0;
+			if (timeToNextRequest <= 0) {
+				boolean isUrgent        = hospital.isUrgentRequest();
+				String  bloodType       = hospital.randomBloodType();
+				float   requestedAmount = hospital.randomRequestedAmount();
 
-			sendRequest(requestId, HOSPITAL_ID, bloodType, requestedAmount, isUrgent);
+				// Zarejestruj zamowienie lokalnie (zapisuje czas, zeby moc liczyc timeout)
+				int requestId = hospital.registerRequest(isUrgent, currentTime);
 
-			// Krok 3: jezeli minely 2 pelne kroki i nie dostalismy odpowiedzi
-			// na to zamowienie - liczymy jako niedobor (uproszczenie)
-			// Pelna implementacja wymagalaby sledzenia per-request timeout.
-			// Tutaj niedobory sa rejestrowane przez ambassadora w onBloodTransported
-			// gdy hospitalId sie nie zgadza lub przez brak callbacka po N krokach.
-			// Dla uproszczenia: niedobory sa raportowane przez Transport (shortageCount)
-			// a szpital liczy swoje "oczekujace zamowienia" w ambassadorze.
+				sendRequest(requestId, HOSPITAL_ID, bloodType, requestedAmount, isUrgent);
 
-			log("t=" + fedamb.federateTime
-					+ " | Zamowienie #" + requestId
-					+ " | typ=" + bloodType
-					+ " | ilosc=" + requestedAmount
-					+ " | nagly=" + isUrgent
-					+ " | Zlozone zamowienia=" + hospital.getTotalRequests()
-					+ " | Dostarczone=" + hospital.getDeliveredUnits());
+				log("t=" + currentTime
+						+ " | Zamowienie #" + requestId
+						+ " typ=" + bloodType
+						+ " ilosc=" + requestedAmount
+						+ (isUrgent ? " [NAGLE]" : " [planowe]")
+						+ " | Zlozone=" + hospital.getTotalRequests()
+						+ " Oczekujace=" + hospital.getPendingCount()
+						+ " Dostarczone=" + hospital.getDeliveredUnits()
+						+ " | Wskaznik niedoboru: "
+						+ String.format("%.1f", hospital.getShortageRate()) + "%");
+
+				// Zaplanuj kolejne zamowienie
+				timeToNextRequest = hospital.getTimeToNextRequest();
+			}
 		}
 
-		// Podsumowanie statystyk
 		hospital.printStats();
 
-		// Rezygnacja
 		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
 		log("Zrezygnowano z federacji.");
 		try {
@@ -188,8 +187,8 @@ public class HospitalFederate {
 		rtiamb.sendInteraction(requestHandle, params, generateTag());
 		log("Wyslano Request #" + requestId
 				+ ": typ=" + bloodType
-				+ ", ilosc=" + requestedAmount
-				+ ", nagly=" + isUrgent);
+				+ " ilosc=" + requestedAmount
+				+ (isUrgent ? " [NAGLE]" : " [planowe]"));
 	}
 
 	// -----------------------------------------------------------------------
@@ -204,7 +203,6 @@ public class HospitalFederate {
 	}
 
 	private void publishAndSubscribe() throws RTIexception {
-		// --- Publikuj Request ---
 		requestHandle              = rtiamb.getInteractionClassHandle("HLAinteractionRoot.Request");
 		reqRequestIdHandle         = rtiamb.getParameterHandle(requestHandle, "requestId");
 		reqHospitalIdHandle        = rtiamb.getParameterHandle(requestHandle, "hospitalId");
@@ -214,7 +212,6 @@ public class HospitalFederate {
 		rtiamb.publishInteractionClass(requestHandle);
 		log("Publikuje: Request");
 
-		// --- Subskrybuj BloodTransported ---
 		bloodTransportedHandle     = rtiamb.getInteractionClassHandle("HLAinteractionRoot.BloodTransported");
 		btBloodIdHandle            = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodId");
 		btHospitalIdHandle         = rtiamb.getParameterHandle(bloodTransportedHandle, "hospitalId");

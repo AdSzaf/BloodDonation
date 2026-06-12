@@ -36,9 +36,6 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 	protected boolean isReadyToRun  = false;
 	protected boolean isRunning     = true;
 
-	// Licznik zamowien oczekujacych na realizacje (do obliczania wskaznika niedoboru)
-	private int pendingRequests = 0;
-
 	public HospitalFederateAmbassador(HospitalFederate federate) {
 		this.federate = federate;
 	}
@@ -166,11 +163,17 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 				// Separacja krwi na skladniki + aktualizacja statystyk
 				if (federate.hospital != null) {
 					federate.hospital.separateBlood(bloodAmount, currentTime, donationTime);
+
+					// Oznacz najstarsze otwarte zamowienie jako zrealizowane
+					// -> usunie je z pendingRequests zanim checkTimeouts policzy jako niedobor
+					federate.hospital.registerDelivery();
+
 					log("Szpital #" + targetHospitalId
 							+ " | Sredni wiek krwi: "
 							+ String.format("%.2f", federate.hospital.getAverageBloodAgeDays())
 							+ " dni | Wskaznik niedoboru: "
-							+ String.format("%.1f", federate.hospital.getShortageRate()) + "%");
+							+ String.format("%.1f", federate.hospital.getShortageRate()) + "%"
+							+ " | Oczekujace zamowienia: " + federate.hospital.getPendingCount());
 				}
 
 			} catch (DecoderException e) {

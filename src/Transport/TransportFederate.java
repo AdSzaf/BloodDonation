@@ -20,12 +20,10 @@ import java.util.*;
  * Subskrybuje: BloodCollected, Request
  * Publikuje:   BloodTransported
  *
- * Cala logika magazynu (FIFO, utylizacja, wydawanie) jest w singletonie
- * Transport.getInstance(). Ten federat odpowiada wylacznie za:
- *  - glowna petle symulacyjna (advanceTime co 1 j.s.)
- *  - wywolanie Transport.removeExpired() co krok
- *  - realizacje opoznionych dostaw przez PendingDelivery
- *  - wysylanie interakcji BloodTransported przez RTI
+ * Zmiany v3:
+ *  - handleRequest() wywoluje fulfillRequest() z isUrgent i obsluguje liste jednostek
+ *  - kazda wydana jednostka dostaje osobna pozycje PendingDelivery -> osobny BloodTransported
+ *  - nagle zamowienia maja krotszy czas transportu (MIN_TRANSPORT_TIME)
  */
 public class TransportFederate {
 
@@ -33,9 +31,11 @@ public class TransportFederate {
 	private static final String FEDERATION_NAME = "BloodSupplyFederation";
 	private static final String FOM_PATH        = "foms/ProducerConsumer.xml";
 
-	// Losowy czas transportu do szpitala: 1-5 jednostek symulacyjnych
-	private static final int MIN_TRANSPORT_TIME = 1;
-	private static final int MAX_TRANSPORT_TIME = 5;
+	// Czas transportu planowego: 3-5 j.s., naglego: 1-2 j.s.
+	private static final int MIN_TRANSPORT_URGENT  = 1;
+	private static final int MAX_TRANSPORT_URGENT  = 2;
+	private static final int MIN_TRANSPORT_PLANNED = 3;
+	private static final int MAX_TRANSPORT_PLANNED = 5;
 
 	// RTI
 	private RTIambassador rtiamb;
@@ -121,21 +121,18 @@ public class TransportFederate {
 		publishAndSubscribe();
 		log("Publikowanie i subskrypcja skonfigurowane.");
 
-		// -----------------------------------------------------------------------
-		// Glowna petla: krok co 1 jednostke symulacyjna
-		// -----------------------------------------------------------------------
 		Transport storage = Transport.getInstance();
 
 		while (fedamb.isRunning) {
 			advanceTime(1.0);
 			double currentTime = fedamb.federateTime;
 
-			// 1. Utylizacja przeterminowanej krwi - deleguj do singletona
+			// 1. Utylizacja przeterminowanej krwi
 			int expired = storage.removeExpired(currentTime);
 			if (expired > 0)
 				log("Usunieto " + expired + " przeterminowanych jednostek.");
 
-			// 2. Realizacja dostaw, ktorych czas transportu uplynal
+			// 2. Realizacja dostaw po uplynieciu czasu transportu
 			processPendingDeliveries(currentTime);
 
 			log("t=" + currentTime
@@ -155,7 +152,6 @@ public class TransportFederate {
 
 	// -----------------------------------------------------------------------
 	// Obsluga zapotrzebowania od szpitala
-	// Wywolywana z TransportFederateAmbassador po odebraniu Request
 	// -----------------------------------------------------------------------
 	void handleRequest(int requestId, int hospitalId, String bloodType,
 					   float requestedAmount, boolean isUrgent) {
@@ -166,33 +162,43 @@ public class TransportFederate {
 				+ " | ilosc=" + requestedAmount
 				+ " | nagly=" + isUrgent);
 
-		// Deleguj do singletona - FIFO, zwraca null jesli niedobor
-		Transport.BloodEntry unit =
-				Transport.getInstance().fulfillRequest(bloodType, requestedAmount);
+		// fulfillRequest zwraca liste jednostek (moze byc wiele lub pusta)
+		List<Transport.BloodEntry> units =
+				Transport.getInstance().fulfillRequest(bloodType, requestedAmount, isUrgent);
 
-		if (unit == null) {
-			// Niedobor juz zalogowany i policzony wewnatrz Transport.fulfillRequest()
+		if (units.isEmpty()) {
+			// Kompletny niedobor - juz zalogowany w Transport.fulfillRequest()
 			return;
 		}
 
-		// Zaplanuj dostawe po losowym czasie transportu
-		int transportDelay = random.nextInt(MAX_TRANSPORT_TIME - MIN_TRANSPORT_TIME + 1)
-				+ MIN_TRANSPORT_TIME;
-		double deliveryTime = fedamb.federateTime + transportDelay;
+		// Kazda wydana jednostka -> osobna pozycja PendingDelivery -> osobny BloodTransported
+		// Nagle zamowienia maja krotszy czas transportu
+		for (Transport.BloodEntry unit : units) {
+			int transportDelay;
+			if (isUrgent) {
+				transportDelay = random.nextInt(
+						MAX_TRANSPORT_URGENT - MIN_TRANSPORT_URGENT + 1) + MIN_TRANSPORT_URGENT;
+			} else {
+				transportDelay = random.nextInt(
+						MAX_TRANSPORT_PLANNED - MIN_TRANSPORT_PLANNED + 1) + MIN_TRANSPORT_PLANNED;
+			}
+			double deliveryTime = fedamb.federateTime + transportDelay;
 
-		pendingDeliveries.add(new PendingDelivery(
-				unit.bloodId, hospitalId,
-				unit.bloodAmount, unit.bloodType,
-				unit.donationTime, deliveryTime
-		));
+			pendingDeliveries.add(new PendingDelivery(
+					unit.bloodId, hospitalId,
+					unit.bloodAmount, unit.bloodType,
+					unit.donationTime, deliveryTime, isUrgent
+			));
 
-		log("Zaplanowano transport: id=" + unit.bloodId
-				+ " -> szpital=" + hospitalId
-				+ " (za " + transportDelay + " j.s., o t=" + deliveryTime + ")");
+			log("Zaplanowano transport: id=" + unit.bloodId
+					+ " -> szpital=" + hospitalId
+					+ " za " + transportDelay + " j.s."
+					+ (isUrgent ? " [PILNY]" : " [planowy]"));
+		}
 	}
 
 	// -----------------------------------------------------------------------
-	// Sprawdza kolejke i wysyla BloodTransported gdy czas transportu uplynal
+	// Realizacja dostaw po uplynieciu czasu transportu
 	// -----------------------------------------------------------------------
 	private void processPendingDeliveries(double currentTime) throws RTIexception {
 		Iterator<PendingDelivery> it = pendingDeliveries.iterator();
@@ -205,9 +211,6 @@ public class TransportFederate {
 		}
 	}
 
-	// -----------------------------------------------------------------------
-	// Wyslanie interakcji BloodTransported
-	// -----------------------------------------------------------------------
 	private void sendBloodTransported(PendingDelivery d) throws RTIexception {
 		ParameterHandleValueMap params = rtiamb.getParameterHandleValueMapFactory().create(5);
 
@@ -226,7 +229,7 @@ public class TransportFederate {
 		log("Wyslano BloodTransported: id=" + d.bloodId
 				+ " -> szpital=" + d.hospitalId
 				+ " typ=" + d.bloodType
-				+ " ilosc=" + d.bloodAmount);
+				+ (d.isUrgent ? " [PILNY]" : ""));
 	}
 
 	// -----------------------------------------------------------------------
@@ -241,7 +244,6 @@ public class TransportFederate {
 	}
 
 	private void publishAndSubscribe() throws RTIexception {
-		// Subskrybuj BloodCollected
 		bloodCollectedHandle  = rtiamb.getInteractionClassHandle("HLAinteractionRoot.BloodCollected");
 		bcBloodIdHandle       = rtiamb.getParameterHandle(bloodCollectedHandle, "bloodId");
 		bcBloodAmountHandle   = rtiamb.getParameterHandle(bloodCollectedHandle, "bloodAmount");
@@ -251,7 +253,6 @@ public class TransportFederate {
 		rtiamb.subscribeInteractionClass(bloodCollectedHandle);
 		log("Subskrybuje: BloodCollected");
 
-		// Subskrybuj Request
 		requestHandle            = rtiamb.getInteractionClassHandle("HLAinteractionRoot.Request");
 		reqRequestIdHandle       = rtiamb.getParameterHandle(requestHandle, "requestId");
 		reqHospitalIdHandle      = rtiamb.getParameterHandle(requestHandle, "hospitalId");
@@ -261,7 +262,6 @@ public class TransportFederate {
 		rtiamb.subscribeInteractionClass(requestHandle);
 		log("Subskrybuje: Request");
 
-		// Publikuj BloodTransported
 		bloodTransportedHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.BloodTransported");
 		btBloodIdHandle        = rtiamb.getParameterHandle(bloodTransportedHandle, "bloodId");
 		btHospitalIdHandle     = rtiamb.getParameterHandle(bloodTransportedHandle, "hospitalId");
@@ -284,8 +284,7 @@ public class TransportFederate {
 	}
 
 	// -----------------------------------------------------------------------
-	// Klasa pomocnicza: oczekujaca dostawa (dane potrzebne do wyslania BloodTransported)
-	// Nie zastepuje Transport.BloodEntry - sluzy tylko do kolejkowania dostaw w locie
+	// Klasa PendingDelivery - dostawa w trakcie transportu
 	// -----------------------------------------------------------------------
 	static class PendingDelivery {
 		final int    bloodId;
@@ -294,15 +293,18 @@ public class TransportFederate {
 		final String bloodType;
 		final double donationTime;
 		final double deliveryTime;
+		final boolean isUrgent;
 
 		PendingDelivery(int bloodId, int hospitalId, float bloodAmount,
-						String bloodType, double donationTime, double deliveryTime) {
+						String bloodType, double donationTime,
+						double deliveryTime, boolean isUrgent) {
 			this.bloodId      = bloodId;
 			this.hospitalId   = hospitalId;
 			this.bloodAmount  = bloodAmount;
 			this.bloodType    = bloodType;
 			this.donationTime = donationTime;
 			this.deliveryTime = deliveryTime;
+			this.isUrgent     = isUrgent;
 		}
 	}
 
