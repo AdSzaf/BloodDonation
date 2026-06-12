@@ -28,7 +28,7 @@ public class BloodPointsFederateAmbassador extends NullFederateAmbassador {
 	}
 
 	private void log(String msg) {
-		System.out.println("BloodPointsAmbassador : " + msg);
+		System.out.println("[" + federate.getFederateName() + " Amb] : " + msg);
 	}
 
 	@Override

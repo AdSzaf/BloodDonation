@@ -1,5 +1,6 @@
 package BloodPoints;
 
+import core.Main;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.EncoderFactory;
 import hla.rti1516e.encoding.HLAASCIIstring;
@@ -36,6 +37,7 @@ public class BloodPointsFederate {
 	public static final String READY_TO_RUN = "ReadyToRun";
 	private static final String FEDERATION_NAME = "BloodSupplyFederation";
 	private static final String FOM_PATH = "foms/ProducerConsumer.xml";
+	private String federateName;
 
 	// RTI
 	private RTIambassador rtiamb;
@@ -54,7 +56,7 @@ public class BloodPointsFederate {
 	// -----------------------------------------------------------------------
 
 	private void log(String message) {
-		System.out.println("BloodPointsFederate : " + message);
+		System.out.println("[" + federateName + "] : " + message);
 	}
 
 	private void waitForUser() {
@@ -68,6 +70,7 @@ public class BloodPointsFederate {
 	// Glowna metoda symulacji
 	// -----------------------------------------------------------------------
 	public void runFederate(String federateName) throws Exception {
+		this.federateName = federateName;
 
 		// 1. Utworz RTIambassador i polacz
 		log("Tworze RTIambassador...");
@@ -95,9 +98,11 @@ public class BloodPointsFederate {
 		this.timeFactory = (HLAfloat64TimeFactory) rtiamb.getTimeFactory();
 
 		// 4. Synchronizacja ReadyToRun
-		rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
+		//rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 		while (!fedamb.isAnnounced) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
-		waitForUser();
+		while (!Main.startSimulation) {
+			Thread.sleep(100);
+		}
 		rtiamb.synchronizationPointAchieved(READY_TO_RUN);
 		log("Osiagnieto punkt synchronizacji: " + READY_TO_RUN);
 		while (!fedamb.isReadyToRun) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
@@ -253,5 +258,9 @@ public class BloodPointsFederate {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+
+	public String getFederateName() {
+		return federateName;
 	}
 }

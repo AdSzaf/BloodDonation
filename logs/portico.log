@@ -1,2 +1,5 @@
-14:58:22,734 ERROR [Thread-Hospital] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
-14:58:23,729 ERROR [Thread-BloodPoints] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+17:28:12,842 ERROR [Thread-2] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+17:28:13,711 ERROR [Thread-3] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+17:28:14,415 ERROR [Thread-1] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+17:28:16,007 ERROR [Thread-4] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+17:28:17,508 ERROR [Thread-5] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation

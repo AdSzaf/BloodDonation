@@ -41,7 +41,8 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 	}
 
 	private void log(String msg) {
-		System.out.println("HospitalAmbassador : " + msg);
+		System.out.println("[" + federate.getFederateName() + " Amb] : " + msg);
+
 	}
 
 	// -----------------------------------------------------------------------

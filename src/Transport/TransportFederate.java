@@ -1,5 +1,6 @@
 package Transport;
 
+import core.Main;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.EncoderFactory;
 import hla.rti1516e.exceptions.*;
@@ -30,6 +31,7 @@ public class TransportFederate {
 	public static final String READY_TO_RUN   = "ReadyToRun";
 	private static final String FEDERATION_NAME = "BloodSupplyFederation";
 	private static final String FOM_PATH        = "foms/ProducerConsumer.xml";
+	private String federateName;
 
 	// Czas transportu planowego: 3-5 j.s., naglego: 1-2 j.s.
 	private static final int MIN_TRANSPORT_URGENT  = 1;
@@ -74,7 +76,7 @@ public class TransportFederate {
 	// -----------------------------------------------------------------------
 
 	private void log(String message) {
-		System.out.println("TransportFederate  : " + message);
+		System.out.println("[" + federateName + "] : " + message);
 	}
 
 	private void waitForUser() {
@@ -88,6 +90,7 @@ public class TransportFederate {
 	// Glowna metoda symulacji
 	// -----------------------------------------------------------------------
 	public void runFederate(String federateName) throws Exception {
+		this.federateName = federateName;
 
 		log("Tworze RTIambassador...");
 		rtiamb = RtiFactoryFactory.getRtiFactory().getRtiAmbassador();
@@ -112,7 +115,9 @@ public class TransportFederate {
 
 		rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 		while (!fedamb.isAnnounced) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
-		waitForUser();
+		while (!Main.startSimulation) {
+			Thread.sleep(100);
+		}
 		rtiamb.synchronizationPointAchieved(READY_TO_RUN);
 		while (!fedamb.isReadyToRun) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
 
@@ -306,6 +311,10 @@ public class TransportFederate {
 			this.deliveryTime = deliveryTime;
 			this.isUrgent     = isUrgent;
 		}
+	}
+
+	public String getFederateName() {
+		return federateName;
 	}
 
 	// -----------------------------------------------------------------------

@@ -1,5 +1,6 @@
 package Hospital;
 
+import core.Main;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.EncoderFactory;
 import hla.rti1516e.exceptions.*;
@@ -29,8 +30,13 @@ public class HospitalFederate {
 	public static final String READY_TO_RUN   = "ReadyToRun";
 	private static final String FEDERATION_NAME = "BloodSupplyFederation";
 	private static final String FOM_PATH        = "foms/ProducerConsumer.xml";
-	private static final int    HOSPITAL_ID     = 1;
+	private int hospitalId;
+	private String federateName;
 
+
+	public HospitalFederate(int hospitalId) {
+		this.hospitalId = hospitalId;
+	}
 	// RTI
 	private RTIambassador rtiamb;
 	private HospitalFederateAmbassador fedamb;
@@ -61,7 +67,7 @@ public class HospitalFederate {
 	// -----------------------------------------------------------------------
 
 	private void log(String message) {
-		System.out.println("HospitalFederate   : " + message);
+		System.out.println("[" + federateName + "] : " + message);
 	}
 
 	private void waitForUser() {
@@ -75,6 +81,7 @@ public class HospitalFederate {
 	// Glowna metoda symulacji
 	// -----------------------------------------------------------------------
 	public void runFederate(String federateName) throws Exception {
+		this.federateName = federateName;
 
 		log("Tworze RTIambassador...");
 		rtiamb = RtiFactoryFactory.getRtiFactory().getRtiAmbassador();
@@ -97,9 +104,11 @@ public class HospitalFederate {
 		log("Dolaczono jako " + federateName);
 		this.timeFactory = (HLAfloat64TimeFactory) rtiamb.getTimeFactory();
 
-		rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
+		//rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 		while (!fedamb.isAnnounced) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
-		waitForUser();
+		while (!Main.startSimulation) {
+			Thread.sleep(100);
+		}
 		rtiamb.synchronizationPointAchieved(READY_TO_RUN);
 		log("Osiagnieto punkt synchronizacji: " + READY_TO_RUN);
 		while (!fedamb.isReadyToRun) rtiamb.evokeMultipleCallbacks(0.1, 0.2);
@@ -109,7 +118,7 @@ public class HospitalFederate {
 		publishAndSubscribe();
 		log("Publikowanie i subskrypcja skonfigurowane.");
 
-		hospital = new Hospital(HOSPITAL_ID);
+		hospital = new Hospital(this.hospitalId);
 		// Pierwsze zamowienie po losowym czasie
 		timeToNextRequest = hospital.getTimeToNextRequest();
 
@@ -135,7 +144,7 @@ public class HospitalFederate {
 				// Zarejestruj zamowienie lokalnie (zapisuje czas, zeby moc liczyc timeout)
 				int requestId = hospital.registerRequest(isUrgent, currentTime);
 
-				sendRequest(requestId, HOSPITAL_ID, bloodType, requestedAmount, isUrgent);
+				sendRequest(requestId, hospitalId, bloodType, requestedAmount, isUrgent);
 
 				log("t=" + currentTime
 						+ " | Zamowienie #" + requestId
@@ -233,11 +242,15 @@ public class HospitalFederate {
 		return ("(ts)" + System.currentTimeMillis()).getBytes();
 	}
 
+	public String getFederateName() {
+		return federateName;
+	}
+
 	// -----------------------------------------------------------------------
 	public static void main(String[] args) {
 		String federateName = (args.length > 0) ? args[0] : "Hospital";
 		try {
-			new HospitalFederate().runFederate(federateName);
+			new HospitalFederate(1).runFederate(federateName);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

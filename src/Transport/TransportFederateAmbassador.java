@@ -37,7 +37,8 @@ public class TransportFederateAmbassador extends NullFederateAmbassador {
 	}
 
 	private void log(String msg) {
-		System.out.println("TransportAmbassador: " + msg);
+		System.out.println("[" + federate.getFederateName() + " Amb] : " + msg);
+
 	}
 
 	// -----------------------------------------------------------------------
