@@ -154,11 +154,15 @@ public class TransportFederate {
 			);
 		}
 
-		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
-		log("Zrezygnowano. Laczna liczba niedoborow: " + storage.getShortageCount());
+		try {
+			rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
+			log("Zrezygnowano. Laczna liczba niedoborow: " + storage.getShortageCount());
+		} catch (RTIexception e) {
+			log("Nie udalo sie poprawnie zrezygnowac z federacji: " + e.getMessage());
+		}
 		try {
 			rtiamb.destroyFederationExecution(FEDERATION_NAME);
-		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined e) {
+		} catch (RTIexception e) {
 			log("Nie mozna zniszczyc federacji: " + e.getMessage());
 		}
 	}

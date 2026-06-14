@@ -169,7 +169,14 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 
 				// Separacja krwi na skladniki + aktualizacja statystyk
 				if (federate.hospital != null) {
-					federate.hospital.separateBlood(bloodAmount, currentTime, donationTime);
+					int separationTime = federate.hospital.getSeparationTime();
+					double separationEndTime = currentTime + separationTime;
+
+					log("Rozpoczeto separacje krwi id=" + bloodId
+							+ " | czas separacji=" + separationTime
+							+ " j.s. | koniec t=" + separationEndTime);
+
+					federate.hospital.separateBlood(bloodAmount, separationEndTime, donationTime);
 					SimulationStats.recordDelivery();
 
 					// Oznacz najstarsze otwarte zamowienie jako zrealizowane

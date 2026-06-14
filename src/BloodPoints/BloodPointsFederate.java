@@ -177,12 +177,16 @@ public class BloodPointsFederate {
 		}
 
 		// Rezygnacja
-		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
-		log("Zrezygnowano z federacji.");
+		try {
+			rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
+			log("Zrezygnowano z federacji.");
+		} catch (RTIexception e) {
+			log("Nie udalo sie poprawnie zrezygnowac z federacji: " + e.getMessage());
+		}
 		try {
 			rtiamb.destroyFederationExecution(FEDERATION_NAME);
 			log("Federacja zniszczona.");
-		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined e) {
+		} catch (RTIexception e) {
 			log("Nie mozna zniszczyc federacji: " + e.getMessage());
 		}
 	}
