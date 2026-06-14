@@ -1,5 +1,6 @@
 package Hospital;
 
+import core.SimulationStats;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.DecoderException;
 import hla.rti1516e.encoding.HLAASCIIstring;
@@ -169,6 +170,7 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 				// Separacja krwi na skladniki + aktualizacja statystyk
 				if (federate.hospital != null) {
 					federate.hospital.separateBlood(bloodAmount, currentTime, donationTime);
+					SimulationStats.recordDelivery();
 
 					// Oznacz najstarsze otwarte zamowienie jako zrealizowane
 					// -> usunie je z pendingRequests zanim checkTimeouts policzy jako niedobor

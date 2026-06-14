@@ -200,4 +200,7 @@ public class Hospital {
     public int getUnmetRequests()   { return unmetRequests; }
     public int getDeliveredUnits()  { return deliveredUnitsCount; }
     public int getPendingCount()    { return pendingRequests.size(); }
+    public int getPlasmaUnits()     { return plasmaUnits; }
+    public int getPlateletUnits()   { return plateletUnits; }
+    public int getRedCellUnits()    { return redCellUnits; }
 }

@@ -1,6 +1,7 @@
 package BloodPoints;
 
 import core.Main;
+import core.SimulationStats;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.EncoderFactory;
 import hla.rti1516e.encoding.HLAASCIIstring;
@@ -122,7 +123,7 @@ public class BloodPointsFederate {
 		int donorCounter = 0;
 		int shiftElapsed = 0; // czas uplyniety w biezacej zmianie (dla krwiobusu)
 
-		while (fedamb.isRunning) {
+		while (fedamb.isRunning && fedamb.federateTime < Main.SIMULATION_END_TIME) {
 
 			// --- Krok 1: czas przyjscia kolejnego dawcy ---
 			int timeToNextDonor = bp.getTimeToNextDonor();
@@ -211,6 +212,7 @@ public class BloodPointsFederate {
 		params.put(bcIsMobileHandle, encMobile.toByteArray());
 
 		rtiamb.sendInteraction(bloodCollectedHandle, params, generateTag());
+		SimulationStats.recordDonation(isMobile);
 		log("Wyslano BloodCollected: id=" + bloodId + ", type=" + bloodType
 				+ ", amount=" + bloodAmount + ", donationTime=" + donationTime
 				+ ", mobile=" + isMobile);

@@ -1,6 +1,7 @@
 package Hospital;
 
 import core.Main;
+import core.SimulationStats;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.EncoderFactory;
 import hla.rti1516e.exceptions.*;
@@ -128,7 +129,7 @@ public class HospitalFederate {
 		// Dzieki temu checkTimeouts() dziala dokladnie, a zamowienia
 		// sa generowane gdy odlicznik dobiegnie do 0
 		// -----------------------------------------------------------------------
-		while (fedamb.isRunning) {
+		while (fedamb.isRunning && fedamb.federateTime < Main.SIMULATION_END_TIME) {
 			advanceTime(1.0);
 			double currentTime = fedamb.federateTime;
 
@@ -161,9 +162,31 @@ public class HospitalFederate {
 				// Zaplanuj kolejne zamowienie
 				timeToNextRequest = hospital.getTimeToNextRequest();
 			}
+			SimulationStats.recordHospitalSnapshot(
+					currentTime,
+					hospital.getHospitalId(),
+					hospital.getTotalRequests(),
+					hospital.getUnmetRequests(),
+					hospital.getDeliveredUnits(),
+					hospital.getPendingCount(),
+					hospital.getShortageRate(),
+					hospital.getAverageBloodAgeDays()
+			);
 		}
 
 		hospital.printStats();
+		SimulationStats.recordHospitalFinal(
+				hospital.getHospitalId(),
+				hospital.getTotalRequests(),
+				hospital.getUnmetRequests(),
+				hospital.getDeliveredUnits(),
+				hospital.getPendingCount(),
+				hospital.getShortageRate(),
+				hospital.getAverageBloodAgeDays(),
+				hospital.getPlasmaUnits(),
+				hospital.getPlateletUnits(),
+				hospital.getRedCellUnits()
+		);
 
 		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
 		log("Zrezygnowano z federacji.");

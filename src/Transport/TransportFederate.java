@@ -1,6 +1,7 @@
 package Transport;
 
 import core.Main;
+import core.SimulationStats;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.EncoderFactory;
 import hla.rti1516e.exceptions.*;
@@ -129,7 +130,7 @@ public class TransportFederate {
 
 		Transport storage = Transport.getInstance();
 
-		while (fedamb.isRunning) {
+		while (fedamb.isRunning && fedamb.federateTime < Main.SIMULATION_END_TIME) {
 			advanceTime(1.0);
 			double currentTime = fedamb.federateTime;
 
@@ -145,6 +146,12 @@ public class TransportFederate {
 					+ " | Magazyn: " + storage.getTotalUnits() + " szt. ["
 					+ storage.getStorageSummary() + "]"
 					+ " | Niedobory: " + storage.getShortageCount());
+			SimulationStats.recordTransportSnapshot(
+					currentTime,
+					storage.getTotalUnits(),
+					storage.getShortageCount(),
+					storage.getStorageSummary()
+			);
 		}
 
 		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
