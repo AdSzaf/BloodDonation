@@ -14,6 +14,9 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * Federat Hospital - Szpital / Bank Krwi Szpitalny.
@@ -65,6 +68,7 @@ public class HospitalFederate {
 
 	// Czas do nastepnego zamowienia - odliczany w petli krokowej
 	private double timeToNextRequest = 0;
+	private final List<PendingSeparation> pendingSeparations = new ArrayList<>();
 
 	// -----------------------------------------------------------------------
 
@@ -133,6 +137,7 @@ public class HospitalFederate {
 			advanceTime(1.0);
 			double currentTime = fedamb.federateTime;
 
+			processPendingSeparations(currentTime);
 			// Sprawdz timeouty otwartych zamowien -> liczy wlasny wskaznik niedoboru
 			hospital.checkTimeouts(currentTime);
 
@@ -228,6 +233,43 @@ public class HospitalFederate {
 				+ (isUrgent ? " [NAGLE]" : " [planowe]"));
 	}
 
+	void scheduleSeparation(int bloodId, int requestId, float bloodAmount,
+							String bloodType, double donationTime, double currentTime) {
+		int separationTime = hospital.getSeparationTime();
+		double finishTime = currentTime + separationTime;
+
+		pendingSeparations.add(new PendingSeparation(
+				bloodId, requestId, bloodAmount, bloodType, donationTime, finishTime
+		));
+
+		log("Zaplanowano separacje krwi id=" + bloodId
+				+ " typ=" + bloodType
+				+ " | request=" + requestId
+				+ " | czas separacji=" + separationTime
+				+ " j.s. | koniec t=" + finishTime);
+	}
+
+	private void processPendingSeparations(double currentTime) {
+		Iterator<PendingSeparation> it = pendingSeparations.iterator();
+		while (it.hasNext()) {
+			PendingSeparation separation = it.next();
+			if (currentTime >= separation.finishTime) {
+				hospital.separateBlood(separation.bloodAmount, currentTime, separation.donationTime);
+				SimulationStats.recordDelivery();
+				hospital.registerDelivery(separation.requestId);
+				log("Zakonczono separacje krwi id=" + separation.bloodId
+						+ " typ=" + separation.bloodType
+						+ " | request=" + separation.requestId
+						+ " | t=" + currentTime
+						+ " | Sredni wiek krwi: "
+						+ String.format("%.2f", hospital.getAverageBloodAgeDays()) + " dni"
+						+ " | Wskaznik niedoboru: "
+						+ String.format("%.1f", hospital.getShortageRate()) + "%");
+				it.remove();
+			}
+		}
+	}
+
 	// -----------------------------------------------------------------------
 	// Metody pomocnicze HLA
 	// -----------------------------------------------------------------------
@@ -273,6 +315,25 @@ public class HospitalFederate {
 
 	public String getFederateName() {
 		return federateName;
+	}
+
+	private static class PendingSeparation {
+		final int bloodId;
+		final int requestId;
+		final float bloodAmount;
+		final String bloodType;
+		final double donationTime;
+		final double finishTime;
+
+		PendingSeparation(int bloodId, int requestId, float bloodAmount,
+						  String bloodType, double donationTime, double finishTime) {
+			this.bloodId = bloodId;
+			this.requestId = requestId;
+			this.bloodAmount = bloodAmount;
+			this.bloodType = bloodType;
+			this.donationTime = donationTime;
+			this.finishTime = finishTime;
+		}
 	}
 
 	// -----------------------------------------------------------------------

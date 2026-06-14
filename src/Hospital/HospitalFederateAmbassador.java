@@ -1,6 +1,5 @@
 package Hospital;
 
-import core.SimulationStats;
 import hla.rti1516e.*;
 import hla.rti1516e.encoding.DecoderException;
 import hla.rti1516e.encoding.HLAASCIIstring;
@@ -167,21 +166,11 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 						+ ", wiek_krwi=" + String.format("%.1f", bloodAgeDays) + " dni"
 						+ "id request=" + requestId);
 
-				// Separacja krwi na skladniki + aktualizacja statystyk
+				// Separacja krwi jest planowana na przyszly czas symulacyjny.
 				if (federate.hospital != null) {
-					int separationTime = federate.hospital.getSeparationTime();
-					double separationEndTime = currentTime + separationTime;
-
-					log("Rozpoczeto separacje krwi id=" + bloodId
-							+ " | czas separacji=" + separationTime
-							+ " j.s. | koniec t=" + separationEndTime);
-
-					federate.hospital.separateBlood(bloodAmount, separationEndTime, donationTime);
-					SimulationStats.recordDelivery();
-
-					// Oznacz najstarsze otwarte zamowienie jako zrealizowane
-					// -> usunie je z pendingRequests zanim checkTimeouts policzy jako niedobor
-					federate.hospital.registerDelivery(requestId);
+					federate.scheduleSeparation(
+							bloodId, requestId, bloodAmount, bloodType, donationTime, currentTime
+					);
 
 					log("Szpital #" + targetHospitalId
 							+ " | Sredni wiek krwi: "
