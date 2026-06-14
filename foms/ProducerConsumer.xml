@@ -103,6 +103,11 @@
 					<semantics>Identyfikator szpitala docelowego</semantics>
 				</parameter>
 				<parameter>
+					<name>requestId</name>
+					<dataType>HLAinteger32BE</dataType>
+					<semantics>ID zamowienia, ktore jest realizowane przez te dostawy</semantics>
+				</parameter>
+				<parameter>
 					<name>bloodAmount</name>
 					<dataType>HLAfloat32BE</dataType>
 					<semantics>Objetosc dostarczonej krwi w litrach</semantics>

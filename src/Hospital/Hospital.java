@@ -97,14 +97,18 @@ public class Hospital {
      * Uproszczenie: mapujemy BloodTransported -> ostatnie otwarte zamowienie tego szpitala,
      * bo BloodTransported nie niesie requestId. Usuwamy najstarsze otwarte zamowienie.
      */
-    public void registerDelivery() {
-        if (pendingRequests.isEmpty()) return;
-        // Usun najstarsze otwarte zamowienie (FIFO - najwczesniej wyslane)
-        int oldestId = pendingRequests.keySet().stream().min(Integer::compareTo).orElse(-1);
-        if (oldestId >= 0) {
-            pendingRequests.remove(oldestId);
+    public void registerDelivery(int requestId) {
+        if (pendingRequests.containsKey(requestId)) {
+            pendingRequests.remove(requestId);
             System.out.println("Hospital #" + hospitalId
-                    + " [DOSTAWA]: Zamknięto zamowienie #" + oldestId);
+                    + " [DOSTAWA]: Zrealizowano zamowienie #" + requestId);
+        } else {
+            // To jest kluczowy moment - krew dotarła, ale zamówienie już wygasło (timeout)
+            System.out.println("Hospital #" + hospitalId
+                    + " [SPÓŹNIONA DOSTAWA]: Odebrano krew dla zamowienia #" + requestId
+                    + ", ktore juz wygasło!");
+            // Opcjonalnie: można tu zmniejszyć licznik unmetRequests,
+            // jeśli chcemy uznać spóźnioną dostawę za "lepiej późno niż wcale"
         }
     }
 
