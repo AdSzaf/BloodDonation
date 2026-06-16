@@ -31,7 +31,9 @@ import java.util.List;
  *  2. Dawca przechodzi badania laboratoryjne (losowy czas).
  *  3. Jesli dawca sie kwalifikuje (80% szans):
  *     - Stacjonarny: wyslij BloodCollected natychmiast.
- *     - Mobilny: dodaj do bufora; po zakonczeniu zmiany wyslij serie BloodCollected.
+ *     - Mobilny: dodaj do bufora (z bloodType i donationTime);
+ *                po zakonczeniu zmiany wyslij serie BloodCollected
+ *                z oryginalnym typem krwi i czasem pobrania.
  */
 public class BloodPointsFederate {
 
@@ -145,7 +147,7 @@ public class BloodPointsFederate {
 				int bloodId = bp.nextBloodId();
 				String bloodType = bp.randomBloodType();
 				float amount = BloodPoints.UNIT_VOLUME;
-				double donationTime = fedamb.federateTime;
+				double donationTime = fedamb.federateTime; // czas rzeczywistego pobrania
 
 				if (!bp.isMobile()) {
 					// --- STACJONARNY: wyslij natychmiast ---
@@ -153,25 +155,21 @@ public class BloodPointsFederate {
 							+ bloodId + " (" + bloodType + ")");
 					sendBloodCollected(bloodId, amount, bloodType, donationTime, false);
 				} else {
-					// --- MOBILNY: buforuj ---
-					bp.addToMobileBuffer(bloodId, bloodType);
-					// Zapamietaj szczegoly donacji zeby moc wyslac po zakonczeniu zmiany
-					// (uproszczenie: wysylamy z biezacym czasem - w pelnej implementacji
-					//  mozna przechowywac donationTime osobno)
+					// --- MOBILNY: buforuj z oryginalnym typem krwi i czasem pobrania ---
+					bp.addToMobileBuffer(bloodId, bloodType, donationTime);
 				}
 			}
 
 			// --- Krok 4: dla krwiobusu - czy zmiana sie skonczyla? ---
 			if (bp.isMobile() && bp.isShiftOver(shiftElapsed)) {
 				shiftElapsed = 0;
-				List<int[]> batch = bp.flushMobileBuffer();
+				List<Object[]> batch = bp.flushMobileBuffer();
 				log("Koniec zmiany krwiobusu - wysylam partie " + batch.size() + " donacji.");
-				for (int[] entry : batch) {
-					int bId = entry[0];
-					// W buforze nie przechowalismy bloodType jako stringa - upraszczamy:
-					// generujemy losowa grupe dla kazdej jednostki z bufora
-					String bt = bp.randomBloodType();
-					sendBloodCollected(bId, BloodPoints.UNIT_VOLUME, bt, fedamb.federateTime, true);
+				for (Object[] entry : batch) {
+					int    bId   = (Integer) entry[0];
+					String bt    = (String)  entry[1];
+					double dTime = (Double)  entry[2]; // oryginalny czas pobrania
+					sendBloodCollected(bId, BloodPoints.UNIT_VOLUME, bt, dTime, true);
 				}
 			}
 		}
@@ -183,12 +181,12 @@ public class BloodPointsFederate {
 		} catch (RTIexception e) {
 			log("Nie udalo sie poprawnie zrezygnowac z federacji: " + e.getMessage());
 		}
-		try {
-			rtiamb.destroyFederationExecution(FEDERATION_NAME);
-			log("Federacja zniszczona.");
-		} catch (RTIexception e) {
-			log("Nie mozna zniszczyc federacji: " + e.getMessage());
-		}
+//		try {
+//			rtiamb.destroyFederationExecution(FEDERATION_NAME);
+//			log("Federacja zniszczona.");
+//		} catch (RTIexception e) {
+//			log("Nie mozna zniszczyc federacji: " + e.getMessage());
+//		}
 	}
 
 	// -----------------------------------------------------------------------

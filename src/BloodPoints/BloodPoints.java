@@ -30,8 +30,9 @@ public class BloodPoints {
     private final boolean isMobile;
     private final Random random;
 
-    // Bufor krwiobusu - pary (bloodId, bloodType)
-    private final List<int[]> mobileBuffer = new ArrayList<>();
+    // Bufor krwiobusu - trojki (bloodId, bloodType, donationTime)
+    private final List<Object[]> mobileBuffer = new ArrayList<>();
+
     // Dla krwiobusu: licznik czasu do konca zmiany
     private int shiftTimeRemaining;
     // Globalny licznik ID donacji
@@ -90,13 +91,17 @@ public class BloodPoints {
 
     /**
      * Dla trybu mobilnego: dodaje donacje do lokalnego bufora krwiobusu.
-     * @param bloodId  ID donacji
-     * @param bloodType grupa krwi
+     * Przechowuje bloodId, bloodType ORAZ donationTime (czas rzeczywistego pobrania).
+     *
+     * @param bloodId      ID donacji
+     * @param bloodType    grupa krwi
+     * @param donationTime czas pobrania (symulacyjny)
      */
-    public void addToMobileBuffer(int bloodId, String bloodType) {
-        mobileBuffer.add(new int[]{bloodId, bloodType.hashCode()}); // przechowujemy indeks
+    public void addToMobileBuffer(int bloodId, String bloodType, double donationTime) {
+        mobileBuffer.add(new Object[]{bloodId, bloodType, donationTime});
         System.out.println("BloodPoints [MOBILNY]: Dodano do bufora donacje #" + bloodId
-                + " (" + bloodType + "). W buforze: " + mobileBuffer.size() + " szt.");
+                + " (" + bloodType + ") t=" + donationTime
+                + ". W buforze: " + mobileBuffer.size() + " szt.");
     }
 
     /**
@@ -114,9 +119,10 @@ public class BloodPoints {
 
     /**
      * Zwraca bufor krwiobusu i go czysci (wywolywane po zakonczeniu zmiany).
+     * Kazdy element to Object[]{ bloodId (Integer), bloodType (String), donationTime (Double) }.
      */
-    public List<int[]> flushMobileBuffer() {
-        List<int[]> copy = new ArrayList<>(mobileBuffer);
+    public List<Object[]> flushMobileBuffer() {
+        List<Object[]> copy = new ArrayList<>(mobileBuffer);
         mobileBuffer.clear();
         System.out.println("BloodPoints [MOBILNY]: Wyslano partie " + copy.size() + " donacji.");
         return copy;

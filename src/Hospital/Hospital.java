@@ -94,8 +94,6 @@ public class Hospital {
     /**
      * Oznacza zamowienie jako zrealizowane (dostawa otrzymana).
      * Wywolywane z ambassadora po odebraniu BloodTransported.
-     * Uproszczenie: mapujemy BloodTransported -> ostatnie otwarte zamowienie tego szpitala,
-     * bo BloodTransported nie niesie requestId. Usuwamy najstarsze otwarte zamowienie.
      */
     public void registerDelivery(int requestId) {
         if (pendingRequests.containsKey(requestId)) {

@@ -3,6 +3,7 @@ package core;
 import BloodPoints.BloodPointsFederate;
 import Hospital.HospitalFederate;
 import Transport.TransportFederate;
+import hla.rti1516e.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,7 +11,7 @@ import java.util.Scanner;
 
 public class Main {
 
-    private static final int STARTUP_DELAY_MS = 1000;
+    private static final int STARTUP_DELAY_MS = 3000;
     private static final int NUM_BLOOD_POINTS = 3;
     private static final int NUM_HOSPITALS = 2;
 
@@ -21,6 +22,17 @@ public class Main {
     public static volatile boolean startSimulation = false;
 
     public static void main(String[] args) throws InterruptedException {
+
+        // Spróbuj posprzątać po ewentualnej poprzedniej sesji
+        try {
+            RTIambassador cleanup = RtiFactoryFactory.getRtiFactory().getRtiAmbassador();
+            cleanup.connect(new NullFederateAmbassador(){}, CallbackModel.HLA_EVOKED);
+            cleanup.destroyFederationExecution("BloodSupplyFederation");
+            cleanup.disconnect();
+            System.out.println("[core.Main] Wyczyszczono pozostalosci poprzedniej federacji.");
+        } catch (Exception e) {
+            // Normalnie - federacja nie istnieje lub nie da się wyczyścić
+        }
 
         System.out.println("=====================================================");
         System.out.println("  BloodDonation Simulation - Multi-Federate Start");

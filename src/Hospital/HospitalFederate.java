@@ -199,11 +199,11 @@ public class HospitalFederate {
 		} catch (RTIexception e) {
 			log("Nie udalo sie poprawnie zrezygnowac z federacji: " + e.getMessage());
 		}
-		try {
-			rtiamb.destroyFederationExecution(FEDERATION_NAME);
-		} catch (RTIexception e) {
-			log("Nie mozna zniszczyc federacji: " + e.getMessage());
-		}
+//		try {
+//			rtiamb.destroyFederationExecution(FEDERATION_NAME);
+//		} catch (RTIexception e) {
+//			log("Nie mozna zniszczyc federacji: " + e.getMessage());
+//		}
 	}
 
 	// -----------------------------------------------------------------------
