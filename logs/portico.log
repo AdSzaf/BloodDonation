@@ -1,6 +1,6 @@
-22:08:28,445 ERROR [main] portico.lrc.jgroups: FAILURE destoryFederation [BloodSupplyFederation]: doesn't exist
-22:08:37,339 ERROR [Thread-3] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
-22:08:40,338 ERROR [Thread-1] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
-22:08:43,306 ERROR [Thread-4] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
-22:08:46,248 ERROR [Thread-5] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
-22:08:48,803 ERROR [Thread-2] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+12:40:19,270 ERROR [main] portico.lrc.jgroups: FAILURE destoryFederation [BloodSupplyFederation]: doesn't exist
+12:40:32,112 ERROR [Thread-2] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+12:40:36,537 ERROR [Thread-5] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+12:40:39,914 ERROR [Thread-1] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+12:40:43,041 ERROR [Thread-4] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation
+12:40:45,890 ERROR [Thread-3] portico.lrc.jgroups: FAILURE createFederation: already exists, name=BloodSupplyFederation

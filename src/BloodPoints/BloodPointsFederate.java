@@ -132,17 +132,17 @@ public class BloodPointsFederate {
 			advanceTime(timeToNextDonor);
 			shiftElapsed += timeToNextDonor;
 			donorCounter++;
-			log("Pojawil sie dawca #" + donorCounter + " (t=" + fedamb.federateTime + ")");
+			log("Pojawil sie dawca # " + donorCounter + "@" + federateName + " (t=" + fedamb.federateTime + ")");
 
 			// --- Krok 2: badania laboratoryjne ---
 			int labTime = bp.getLabTestDuration();
 			advanceTime(labTime);
 			shiftElapsed += labTime;
-			log("Dawca #" + donorCounter + " przeszedl badania (czas lab=" + labTime + ")");
+			log("Dawca # " + donorCounter + "@" + federateName + " przeszedl badania (czas lab=" + labTime + ")");
 
 			// --- Krok 3: kwalifikacja dawcy ---
 			if (!bp.donorQualifies()) {
-				log("Dawca #" + donorCounter + " NIE przeszedl kwalifikacji - odrzucony.");
+				log("Dawca # " + donorCounter + "@" + federateName + " NIE przeszedl kwalifikacji - odrzucony.");
 			} else {
 				int bloodId = bp.nextBloodId();
 				String bloodType = bp.randomBloodType();
@@ -151,7 +151,7 @@ public class BloodPointsFederate {
 
 				if (!bp.isMobile()) {
 					// --- STACJONARNY: wyslij natychmiast ---
-					log("Dawca #" + donorCounter + " [STACJONARNY] - wysylam BloodCollected #"
+					log("Dawca # " + donorCounter + "@" + federateName + " [STACJONARNY] - wysylam BloodCollected #"
 							+ bloodId + " (" + bloodType + ")");
 					sendBloodCollected(bloodId, amount, bloodType, donationTime, false);
 				} else {
