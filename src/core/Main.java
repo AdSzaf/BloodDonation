@@ -90,6 +90,7 @@ public class Main {
             t.join();
         }
 
+        SimulationStats.printHospitalReports();
         SimulationStats.writeReport(SIMULATION_END_TIME);
         System.out.println("[core.Main] Symulacja zakonczona.");
         System.out.println("[core.Main] Raport HTML: logs/simulation-report.html");

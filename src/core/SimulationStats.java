@@ -22,6 +22,17 @@ public final class SimulationStats {
     private static int deliveredUnits = 0;
 
     private SimulationStats() {}
+    private static final Map<Integer, String> hospitalReports = new LinkedHashMap<>();
+
+    public static synchronized void recordHospitalReport(int hospitalId, String report) {
+        hospitalReports.put(hospitalId, report);
+    }
+    // wywołaj to w writeReport() lub w Main po joinach:
+    public static void printHospitalReports() {
+        hospitalReports.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(e -> System.out.println(e.getValue()));
+    }
 
     public static synchronized void recordDonation(boolean isMobile) {
         collectedUnits++;

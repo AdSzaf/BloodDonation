@@ -179,7 +179,7 @@ public class HospitalFederate {
 			);
 		}
 
-		hospital.printStats();
+		SimulationStats.recordHospitalReport(hospital.getHospitalId(), hospital.getStatsReport());
 		SimulationStats.recordHospitalFinal(
 				hospital.getHospitalId(),
 				hospital.getTotalRequests(),
@@ -254,17 +254,26 @@ public class HospitalFederate {
 		while (it.hasNext()) {
 			PendingSeparation separation = it.next();
 			if (currentTime >= separation.finishTime) {
-				hospital.separateBlood(separation.bloodAmount, currentTime, separation.donationTime);
+				boolean ok = hospital.separateBlood(
+						separation.bloodAmount, currentTime, separation.donationTime);
 				SimulationStats.recordDelivery();
-				hospital.registerDelivery(separation.requestId);
-				log("Zakonczono separacje krwi id=" + separation.bloodId
-						+ " typ=" + separation.bloodType
-						+ " | request=" + separation.requestId
-						+ " | t=" + currentTime
-						+ " | Sredni wiek krwi: "
-						+ String.format("%.2f", hospital.getAverageBloodAgeDays()) + " dni"
-						+ " | Wskaznik niedoboru: "
-						+ String.format("%.1f", hospital.getShortageRate()) + "%");
+				if (ok) {
+					hospital.registerDelivery(separation.requestId);
+					log("Zakonczono separacje krwi id=" + separation.bloodId
+							+ " typ=" + separation.bloodType
+							+ " | request=" + separation.requestId
+							+ " | t=" + currentTime
+							+ " | Sredni wiek krwi: "
+							+ String.format("%.2f", hospital.getAverageBloodAgeDays()) + " dni"
+							+ " | Wskaznik niedoboru: "
+							+ String.format("%.1f", hospital.getShortageRate()) + "%");
+				} else {
+					// Skladnik przeterminowany - zamowienie nie zostaje zrealizowane,
+					// timeout w checkTimeouts() zliczy je jako niedobor
+					log("Separacja krwi id=" + separation.bloodId
+							+ " | request=" + separation.requestId
+							+ " ODRZUCONA - przeterminowany skladnik");
+				}
 				it.remove();
 			}
 		}

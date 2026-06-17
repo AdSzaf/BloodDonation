@@ -31,6 +31,10 @@ public class Hospital {
     private static final double EXPIRY_PLASMA     = 365.0; // osocze (mrożone)
     private static final double EXPIRY_PLATELETS  = 5.0;   // płytki krwi
 
+    // Proporcje potrzebnego skladnika: osocze 50%, krwinki 35%, plytki 15%
+    private static final double PROB_PLASMA    = 0.50;
+    private static final double PROB_RED_CELLS = 0.85; // 0.50+0.35
+
     // Zamowienie bez odpowiedzi po tym czasie uznawane za niezrealizowane [j.s.]
     // Nagle: 5 j.s., planowe: 20 j.s.
     private static final double TIMEOUT_URGENT  = 5.0;
@@ -56,6 +60,9 @@ public class Hospital {
     private int plasmaUnits   = 0;
     private int plateletUnits = 0;
     private int redCellUnits  = 0;
+    private int usedPlasmaUnits   = 0;
+    private int usedPlateletUnits = 0;
+    private int usedRedCellUnits  = 0;
 
     // -----------------------------------------------------------------------
 
@@ -152,42 +159,58 @@ public class Hospital {
                 + MIN_SEPARATION_TIME;
     }
 
-    public void separateBlood(float bloodAmount, double currentTime, double donationTime) {
+    public boolean separateBlood(float bloodAmount, double currentTime, double donationTime) {
         int units = Math.max(1, Math.round(bloodAmount / UNIT_VOLUME));
         double ageInDays = currentTime - donationTime;
         totalBloodAgeDays   += ageInDays;
         deliveredUnitsCount += units;
 
-        // Sprawdz ktore skladniki sa jeszcze zdatne wedlug wieku krwi
-        int redCellsOk  = (ageInDays <= EXPIRY_RED_CELLS)  ? units : 0;
-        int plasmaOk    = (ageInDays <= EXPIRY_PLASMA)      ? units : 0;
-        int plateletsOk = (ageInDays <= EXPIRY_PLATELETS)   ? units : 0;
-
-        // Licz tylko zdatne jednostki
-        redCellUnits  += redCellsOk;
-        plasmaUnits   += plasmaOk;
-        plateletUnits += plateletsOk;
-
-        // Zlicz przeterminowane skladniki jako niedobor
-        int expiredComponents = (units - redCellsOk)
-                + (units - plasmaOk)
-                + (units - plateletsOk);
-        if (expiredComponents > 0) {
-            expiredComponentCount += expiredComponents;
-            System.out.println("Hospital #" + hospitalId
-                    + " [PRZETERMINOWANY SKLADNIK]: wiek=" + String.format("%.1f", ageInDays)
-                    + " dni | przeterminowane skladniki=" + expiredComponents
-                    + " (krwinki=" + redCellsOk + "/" + units
-                    + " osocze=" + plasmaOk + "/" + units
-                    + " platki=" + plateletsOk + "/" + units + ")");
+        // Losuj jaki skladnik byl potrzebny
+        double roll = random.nextDouble();
+        String neededComponent;
+        double expiryOfNeeded;
+        if (roll < PROB_PLASMA) {
+            neededComponent  = "osocze";
+            expiryOfNeeded   = EXPIRY_PLASMA;
+        } else if (roll < PROB_RED_CELLS) {
+            neededComponent  = "krwinki";
+            expiryOfNeeded   = EXPIRY_RED_CELLS;
+        } else {
+            neededComponent  = "plytki";
+            expiryOfNeeded   = EXPIRY_PLATELETS;
         }
 
-        System.out.println("Hospital #" + hospitalId + " [SEPARACJA]: "
-                + units + " jednostek | wiek krwi="
-                + String.format("%.1f", ageInDays) + " dni"
-                + " | osocze=" + plasmaUnits
-                + " platki=" + plateletUnits
-                + " krwinki=" + redCellUnits);
+        boolean componentOk = ageInDays <= expiryOfNeeded;
+
+        // Zawsze produkujemy wszystkie 3 skladniki z kazdej jednostki
+        plasmaUnits   += units;
+        plateletUnits += units;
+        redCellUnits  += units;
+
+        if (!componentOk) {
+            expiredComponentCount += units;
+            System.out.println("Hospital #" + hospitalId
+                    + " [PRZETERMINOWANY]: potrzebny skladnik='" + neededComponent
+                    + "' wiek=" + String.format("%.1f", ageInDays) + " dni"
+                    + " (limit=" + expiryOfNeeded + ") -> zamowienie NIEZREALIZOWANE");
+        } else {
+            // Tylko potrzebny i zdatny skladnik trafia do "uzytych"
+            if (neededComponent.equals("osocze")) {
+                usedPlasmaUnits += units;
+            } else if (neededComponent.equals("krwinki")) {
+                usedRedCellUnits += units;
+            } else {
+                usedPlateletUnits += units;
+            }
+            System.out.println("Hospital #" + hospitalId + " [SEPARACJA]: "
+                    + units + " jednostek | skladnik=" + neededComponent
+                    + " | wiek=" + String.format("%.1f", ageInDays) + " dni"
+                    + " | uzyto: osocze=" + usedPlasmaUnits
+                    + " plytki=" + usedPlateletUnits
+                    + " krwinki=" + usedRedCellUnits);
+        }
+
+        return componentOk;
     }
 
     // -----------------------------------------------------------------------
@@ -204,21 +227,22 @@ public class Hospital {
         return totalBloodAgeDays / deliveredUnitsCount;
     }
 
-    public void printStats() {
-        System.out.println("========================================");
-        System.out.println("STATYSTYKI Szpital #" + hospitalId);
-        System.out.println("  Laczne zamowienia:      " + totalRequests);
-        System.out.println("  Niezrealizowane:        " + unmetRequests);
-        System.out.println("  Wskaznik niedoboru:     "
-                + String.format("%.1f", getShortageRate()) + "%");
-        System.out.println("  Dostarczone jednostki:  " + deliveredUnitsCount);
-        System.out.println("  Sredni wiek krwi:       "
-                + String.format("%.2f", getAverageBloodAgeDays()) + " dni");
-        System.out.println("  Skladniki - osocze:" + plasmaUnits
-                + "  plytki:" + plateletUnits
-                + "  krwinki:" + redCellUnits);
-        System.out.println("  Przeterminowane skladniki: " + expiredComponentCount);
-        System.out.println("========================================");
+    public String getStatsReport() {
+        return "========================================\n"
+                + "STATYSTYKI Szpital #" + hospitalId + "\n"
+                + "  Laczne zamowienia:      " + totalRequests + "\n"
+                + "  Niezrealizowane:        " + unmetRequests + "\n"
+                + "  Wskaznik niedoboru:     " + String.format("%.1f", getShortageRate()) + "%\n"
+                + "  Dostarczone jednostki:  " + deliveredUnitsCount + "\n"
+                + "  Sredni wiek krwi:       " + String.format("%.2f", getAverageBloodAgeDays()) + " dni\n"
+                + "  Wyprodukowane skladniki:    osocze=" + plasmaUnits
+                + "  plytki=" + plateletUnits
+                + "  krwinki=" + redCellUnits + "\n"
+                + "  Faktycznie uzyte skladniki: osocze=" + usedPlasmaUnits
+                + "  plytki=" + usedPlateletUnits
+                + "  krwinki=" + usedRedCellUnits + "\n"
+                + "  Przeterminowane skladniki:  " + expiredComponentCount + "\n"
+                + "========================================";
     }
 
     public int getHospitalId()      { return hospitalId; }
@@ -230,4 +254,7 @@ public class Hospital {
     public int getPlateletUnits()   { return plateletUnits; }
     public int getRedCellUnits()    { return redCellUnits; }
     public int getExpiredComponentCount() { return expiredComponentCount; }
+    public int getUsedPlasmaUnits()   { return usedPlasmaUnits; }
+    public int getUsedPlateletUnits() { return usedPlateletUnits; }
+    public int getUsedRedCellUnits()  { return usedRedCellUnits; }
 }
