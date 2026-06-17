@@ -164,7 +164,7 @@ public class HospitalFederateAmbassador extends NullFederateAmbassador {
 						+ ", typ=" + bloodType
 						+ ", ilosc=" + bloodAmount
 						+ ", wiek_krwi=" + String.format("%.1f", bloodAgeDays) + " dni"
-						+ "id request=" + requestId);
+						+ ", id request=" + requestId);
 
 				// Separacja krwi jest planowana na przyszly czas symulacyjny.
 				if (federate.hospital != null) {

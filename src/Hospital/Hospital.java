@@ -159,7 +159,7 @@ public class Hospital {
                 + units + " jednostek | wiek krwi="
                 + String.format("%.1f", ageInDays) + " dni"
                 + " | osocze=" + plasmaUnits
-                + " platki=" + plateletUnits
+                + " plytki=" + plateletUnits
                 + " krwinki=" + redCellUnits);
     }
 
@@ -188,7 +188,7 @@ public class Hospital {
         System.out.println("  Sredni wiek krwi:       "
                 + String.format("%.2f", getAverageBloodAgeDays()) + " dni");
         System.out.println("  Skladniki - osocze:" + plasmaUnits
-                + "  platki:" + plateletUnits
+                + "  plytki:" + plateletUnits
                 + "  krwinki:" + redCellUnits);
         System.out.println("========================================");
     }
